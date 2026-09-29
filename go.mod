@@ -1,8 +1,6 @@
 module github.com/konradasb/rungar
 
-go 1.25.5
-
-toolchain go1.25.14
+go 1.26.0
 
 require (
 	github.com/actions/scaleset v0.4.0
@@ -20,7 +18,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	golang.org/x/term v0.45.0
 	google.golang.org/api v0.298.0
 	google.golang.org/grpc v1.84.0
