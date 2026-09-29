@@ -1,0 +1,22 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# What charts/test-chart.sh installs: a daemon with no scale sets, which
+# serves its command line and runs no runner, so it keeps running with no
+# real GitHub credential and no Dicer host to reach.
+image:
+  repository: rungar-chart-test
+  tag: dev
+  pullPolicy: Never
+config:
+  version: 1
+  github:
+    url: https://github.com/my-org
+    token_path: /etc/rungar/token
+  providers:
+    - name: compute1
+      type: dicer
+      address: dicer.invalid:7443
+files:
+  token: ghp_notarealtoken

@@ -1,0 +1,154 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: e2e-aws
+
+# The end-to-end tests against EC2, nightly: the daemon runs on the
+# workflow's own runner, makes Spot instances in a test account, and
+# registers them with a test repository. A run makes a few for a few minutes,
+# well under $0.10. See DEVELOPMENT.md for what every e2e workflow shares.
+#
+# AWS is reached by GitHub's OIDC token, with no key, as a role that only
+# this repository's main branch can assume. Once, in the test account:
+#
+#   aws iam create-open-id-connect-provider \
+#     --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com
+#   aws iam create-role --role-name rungar-e2e-ci --max-session-duration 7200 \
+#     --assume-role-policy-document file://trust.json
+#   aws iam put-role-policy --role-name rungar-e2e-ci --policy-name ec2-runners \
+#     --policy-document file://permissions.json
+#   aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
+#
+# trust.json lets the account's token.actions.githubusercontent.com provider
+# assume the role by sts:AssumeRoleWithWebIdentity when the token's aud is
+# sts.amazonaws.com and its sub is repo:konradasb/rungar:ref:refs/heads/main.
+# permissions.json allows ec2:DescribeInstances and ec2:DescribeImages,
+# ec2:RunInstances in the test region, ec2:CreateTags when ec2:CreateAction
+# is RunInstances, and ec2:TerminateInstances on instances tagged
+# rungar.sh/installation=rungar-e2e. The service-linked role is for Spot,
+# which the CI role cannot make itself.
+#
+# Build the runner AMI in the region, as
+# docs/content/docs/providers/aws/building-an-image.md says
+# (packer build -var region=eu-north-1 build/runner-image/aws); the workflow
+# takes the account's newest, so a rebuild needs nothing else. Then set the
+# repository's variables:
+#
+#   RUNGAR_E2E_AWS_ROLE_ARN  arn:aws:iam::ACCOUNT_ID:role/rungar-e2e-ci; unset,
+#                            the workflow does nothing
+#   RUNGAR_E2E_AWS_REGION    eu-north-1
+#   RUNGAR_E2E_AWS_SUBNETS   subnet-0123, subnet-4567: public subnets, such as
+#                            the default VPC's, tried in order
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs share the test scale set and installation, so one at a time.
+concurrency:
+  group: e2e-aws
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    # A fork has neither the account nor the token.
+    if: vars.RUNGAR_E2E_AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGION: ${{ vars.RUNGAR_E2E_AWS_REGION }}
+      SUBNETS: ${{ vars.RUNGAR_E2E_AWS_SUBNETS }}
+      GITHUB_URL: ${{ vars.RUNGAR_E2E_GITHUB_URL }}
+      CONFIG_DIR: /etc/rungar-e2e
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Two hours, so the credential outlives the run and its cleanup.
+      - name: Authenticate to AWS
+        id: auth
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.RUNGAR_E2E_AWS_ROLE_ARN }}
+          role-session-name: rungar-e2e-${{ github.run_id }}
+          role-duration-seconds: 7200
+          aws-region: ${{ vars.RUNGAR_E2E_AWS_REGION }}
+
+      # The runners boot the account's newest runner AMI.
+      - name: Find the runner image
+        id: image
+        run: |
+          image=$(aws ec2 describe-images --owners self \
+            --filters 'Name=name,Values=actions-runner-*-x64-*' \
+            --query 'sort_by(Images, &CreationDate)[-1].ImageId' --output text)
+          [[ "$image" == ami-* ]] || { echo "no runner AMI in $REGION; build one with build/runner-image/aws" >&2; exit 1; }
+          echo "id=$image" >> "$GITHUB_OUTPUT"
+
+      # The token, the credential and the configuration are for root alone:
+      # the daemon runs as root, and they are secrets. The daemon runs under
+      # systemd, without this step's environment, so it reads the credential
+      # from a file.
+      - name: Write the configuration
+        env:
+          GITHUB_TOKEN_SECRET: ${{ secrets.RUNGAR_E2E_GITHUB_TOKEN }}
+          IMAGE: ${{ steps.image.outputs.id }}
+        run: |
+          sudo install -d -m 0700 "$CONFIG_DIR"
+          printf '%s' "$GITHUB_TOKEN_SECRET" | sudo tee "$CONFIG_DIR/token" >/dev/null
+          sudo tee "$CONFIG_DIR/aws-credentials" >/dev/null <<EOF
+          [default]
+          aws_access_key_id = $AWS_ACCESS_KEY_ID
+          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+          aws_session_token = $AWS_SESSION_TOKEN
+          EOF
+          sudo tee "$CONFIG_DIR/config.yaml" >/dev/null <<EOF
+          github:
+            url: $GITHUB_URL
+            token_path: $CONFIG_DIR/token
+          providers:
+            - name: aws
+              type: aws
+              region: $REGION
+              subnets: [$SUBNETS]
+              public_ip: true
+              credentials_file: $CONFIG_DIR/aws-credentials
+              max_runners: 2
+              runner:
+                instance_type: t3.small
+                image: $IMAGE
+                disk_size: 10GiB
+                spot: true
+                tags: {rungar-e2e: ci}
+          EOF
+          sudo chmod 0600 "$CONFIG_DIR/token" "$CONFIG_DIR/aws-credentials" "$CONFIG_DIR/config.yaml"
+
+      - name: Test
+        run: make test-e2e RUNGAR_E2E_HOST=local RUNGAR_E2E_CONFIG="$CONFIG_DIR/config.yaml"
+
+      # The tests remove their instances; this catches those a killed run
+      # left.
+      - name: Remove what a failed run left
+        if: always() && steps.auth.outcome == 'success'
+        run: |
+          ids=$(aws ec2 describe-instances \
+            --filters 'Name=tag:rungar.sh/installation,Values=rungar-e2e' \
+              'Name=instance-state-name,Values=pending,running,stopping,stopped' \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -n "$ids" ]; then
+            # shellcheck disable=SC2086 # one argument per instance
+            aws ec2 terminate-instances --instance-ids $ids >/dev/null
+          fi

@@ -1,0 +1,91 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# The documentation site, built with Hugo and the Hextra theme. The theme is
+# a Hugo module, pinned in go.mod: see `make docs-serve` and `make docs`.
+
+# Where the site is published. make docs-versions publishes each version
+# under its own path; see docs/build-versions.sh.
+baseURL: https://rungar.sh/
+locale: en-US
+title: Rungar
+
+module:
+  imports:
+    - path: github.com/imfing/hextra
+
+enableRobotsTXT: true
+enableGitInfo: true
+
+markup:
+  goldmark:
+    renderer:
+      # Hextra's shortcodes and callouts emit HTML.
+      unsafe: true
+  highlight:
+    noClasses: false
+
+menu:
+  main:
+    - name: Docs
+      pageRef: /docs
+      weight: 1
+    - name: Search
+      weight: 2
+      params:
+        type: search
+    - name: GitHub
+      weight: 3
+      url: https://github.com/konradasb/rungar
+      params:
+        icon: github
+    - name: Theme
+      weight: 4
+      params:
+        type: theme-toggle
+
+# Every section of the docs sidebar starts expanded.
+cascade:
+  - params:
+      sidebar:
+        open: true
+
+params:
+  description: Ephemeral, autoscaling GitHub Actions runners, a clean machine for every job, on hosts of your own and in the cloud.
+
+  # The card a link to the site unfurls into, and the repository's social
+  # preview on GitHub, which is uploaded by hand under Settings -> General.
+  images:
+    - images/social-preview.png
+
+  # The light and dark switch is in the navbar (menu.main), not at the foot
+  # of the sidebar.
+  theme:
+    displayToggle: false
+
+  navbar:
+    displayTitle: true
+    displayLogo: true
+    logo:
+      path: images/logo.svg
+      dark: images/logo-dark.svg
+      width: 26
+      height: 26
+
+  footer:
+    displayCopyright: false
+    displayPoweredBy: false
+
+  editURL:
+    enable: true
+    base: https://github.com/konradasb/rungar/edit/main/docs/content
+
+  # Hextra fetches Mermaid when the site is built; a major version keeps the
+  # diagrams from changing under us with a new one.
+  mermaid:
+    base: https://cdn.jsdelivr.net/npm/mermaid@11/dist
+
+  search:
+    enable: true
+    type: flexsearch

@@ -1,0 +1,18 @@
+Rungar is running as {{ include "rungar.fullname" . }}, in {{ .Release.Namespace }}.
+
+Check its configuration, and what it is doing:
+
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "rungar.fullname" . }} -- rungar status
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "rungar.fullname" . }} -f
+
+The other rungar commands -- events, scale-sets, runners, providers -- run the
+same way.
+{{- if .Values.metrics.enabled }}
+
+Its metrics are at http://{{ include "rungar.fullname" . }}-metrics.{{ .Release.Namespace }}.svc:{{ .Values.metrics.port }}/metrics
+{{- end }}
+{{- if not .Values.events.persistence.enabled }}
+
+Its events go with the pod: set events.persistence.enabled to keep them.
+{{- end }}

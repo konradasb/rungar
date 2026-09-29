@@ -1,0 +1,24 @@
+# Build output and pinned tools (make build, make tools).
+/bin/
+
+# Test binaries and coverage profiles.
+*.test
+*.out
+
+# Local Go workspaces.
+go.work
+go.work.sum
+
+# The documentation site's build output and Hugo's caches.
+/docs/public/
+/docs/site/
+/docs/resources/
+/docs/.hugo_build.lock
+
+# GoReleaser output, and the completions it packages (make completions).
+/dist/
+/completions/
+
+# Local configuration, which names the GitHub App key and the hosts' TLS
+# material.
+/config.yaml

@@ -1,0 +1,37 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: stale
+
+on:
+  schedule:
+    - cron: "11 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Stale
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: bug, security, help wanted, good first issue
+          exempt-pr-labels: dependencies
+          stale-issue-message: >-
+            This issue has had no activity for 60 days, and will be closed in
+            14 more unless someone comments or removes the stale label.
+          stale-pr-message: >-
+            This pull request has had no activity for 60 days, and will be
+            closed in 14 more unless someone comments, pushes or removes the
+            stale label.

@@ -1,0 +1,24 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# Checkov's configuration for the chart, which `make lint-chart` renders with
+# each values file in rungar/ci and scans as Kubernetes manifests. Each check
+# skipped is one the chart does not meet by design, for the reason given.
+framework:
+  - kubernetes
+compact: true
+quiet: true
+skip-check:
+  # The default namespace should not be used: the chart sets no namespace,
+  # and Helm installs it in the one asked for with --namespace.
+  - CKV_K8S_21
+  # Image should use digest: image.digest pins one; the default is the
+  # release's tag, which is also the chart's version.
+  - CKV_K8S_43
+  # Image pull policy should be Always: the default tag is a release's,
+  # which is never moved, so IfNotPresent pulls nothing new by asking again.
+  - CKV_K8S_15
+  # CPU limits should be set: the daemon is idle but for reconciliations,
+  # and a limit would only throttle those. Memory is limited.
+  - CKV_K8S_11

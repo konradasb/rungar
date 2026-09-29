@@ -1,0 +1,22 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+{{- with .Values.events.persistence }}
+{{- if and .enabled (not .existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rungar.fullname" $ }}-events
+  labels:
+    {{- include "rungar.labels" $ | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .accessModes | nindent 4 }}
+  {{- if .storageClass }}
+  storageClassName: {{ if eq .storageClass "-" }}""{{ else }}{{ .storageClass | quote }}{{ end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .size | quote }}
+{{- end }}
+{{- end }}

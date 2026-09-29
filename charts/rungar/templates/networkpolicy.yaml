@@ -1,0 +1,39 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+{{- with .Values.networkPolicy }}
+{{- if .enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "rungar.fullname" $ }}
+  labels:
+    {{- include "rungar.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "rungar.selectorLabels" $ | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if .egress }}
+    - Egress
+    {{- end }}
+  {{- if $.Values.metrics.enabled }}
+  ingress:
+    - ports:
+        - port: metrics
+          protocol: TCP
+      {{- with .metricsFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- else }}
+  # The daemon listens on nothing else, so nothing is admitted.
+  ingress: []
+  {{- end }}
+  {{- with .egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

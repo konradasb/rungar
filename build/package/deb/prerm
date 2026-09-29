@@ -1,0 +1,13 @@
+#!/bin/sh
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar package's prerm. Only removing the package stops the daemon: an
+# upgrade restarts it, from the postinst, once the new one is in place.
+# Runners keep running, and a rungar installed again adopts them.
+
+set -e
+
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+  systemctl disable --now rungar.service || true
+fi

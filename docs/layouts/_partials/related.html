@@ -1,0 +1,25 @@
+{{- /*
+  Copyright 2026 Rungar Authors
+  SPDX-License-Identifier: MIT
+
+  related shows, at the end of a page, the pages its front matter lists
+  under related, as cards. A page that does not exist fails the build.
+
+    related_title: Next steps   # "Related" unless given
+    related:
+      - /docs/guides/restarts
+      - /docs/concepts/instances
+*/ -}}
+{{- with .Params.related -}}
+  {{- $pages := slice -}}
+  {{- range . -}}
+    {{- with $.GetPage . -}}
+      {{- $pages = $pages | append . -}}
+    {{- else -}}
+      {{- errorf "%s: related page %q does not exist" $.File.Path . -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $title := $.Params.related_title | default "Related" -}}
+  <h2 id="{{ $title | anchorize }}">{{ $title }}</h2>
+  {{- partial "page-cards.html" (dict "pages" $pages) -}}
+{{- end -}}

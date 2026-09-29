@@ -1,0 +1,46 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+#
+# `helm test`: the configuration, as the daemon has it mounted, loads, and the
+# files it names can be read by the daemon's user.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "rungar.fullname" . }}-validate
+  labels:
+    {{- include "rungar.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    # It runs one command and exits: there is nothing to probe.
+    checkov.io/skip1: CKV_K8S_8=the test runs one command and exits
+    checkov.io/skip2: CKV_K8S_9=the test runs one command and exits
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: validate
+      image: {{ include "rungar.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      args: ["validate", "--config", "/etc/rungar/config.yaml"]
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+        {{- include "rungar.configMount" . | nindent 8 }}
+        {{- with .Values.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  volumes:
+    {{- include "rungar.configVolume" . | nindent 4 }}
+    {{- with .Values.extraVolumes }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}

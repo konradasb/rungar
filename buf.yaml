@@ -1,0 +1,25 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # Following Google's AIPs (AIP-131 and AIP-136), methods acting on one
+    # resource return that resource, such as GetScaleSet, PauseScaleSet and
+    # RemoveRunner, rather than a bespoke FooResponse wrapper per method.
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_RESPONSE_STANDARD_NAME
+  ignore_only:
+    # The rule derives an enum's prefix from its name, splitting GitHub into
+    # GIT_HUB; RunnerGitHubStatus's values are RUNNER_GITHUB_STATUS_*, as
+    # GitHub is written everywhere else in the API.
+    ENUM_VALUE_PREFIX:
+      - proto/rungar/v1/rungar.proto
+breaking:
+  use:
+    - FILE

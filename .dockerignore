@@ -1,0 +1,9 @@
+# The image is built from the module alone (see the Dockerfile), so the build
+# context is the module and nothing else: not bin/, not a local config.yaml
+# holding credentials.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
+!proto

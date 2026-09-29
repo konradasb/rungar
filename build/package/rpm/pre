@@ -1,0 +1,17 @@
+#!/bin/sh
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar package's %pre: $1 is 1 on an install, 2 on an upgrade. The rungar
+# user is made before the package's files are installed, so that /etc/rungar
+# is given its group as it is.
+
+if ! getent group rungar >/dev/null; then
+  groupadd --system rungar
+fi
+if ! getent passwd rungar >/dev/null; then
+  useradd --system --gid rungar --no-create-home --home-dir / \
+    --shell /usr/sbin/nologin --comment Rungar rungar
+fi
+
+exit 0

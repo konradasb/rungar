@@ -1,0 +1,7 @@
+# The versions of the documentation that make docs-versions builds, newest
+# first: a name, which is also its path on the site, and the Git ref it is
+# built from, where "." is the working tree.
+#
+# dev is main, which is not released yet. The first release listed is the
+# latest, where the site's root leads; until there is one, dev is.
+dev   .

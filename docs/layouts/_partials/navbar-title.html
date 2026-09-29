@@ -1,0 +1,62 @@
+{{- /*
+  Copyright 2026 Rungar Authors
+  SPDX-License-Identifier: MIT
+
+  Hextra's navbar title, with beside it the version of the documentation
+  being read, which switches to the others. The versions are in
+  params.versions, which docs/build-versions.sh sets for each version it
+  builds; a site built on its own has none, and shows no switcher. The
+  dropdown is Hextra's own, so its script opens and closes it.
+*/ -}}
+{{- $logoPath := .Site.Params.navbar.logo.path | default "images/logo.svg" -}}
+{{- $logoLink := .Site.Params.navbar.logo.link | default .Site.Home.RelPermalink -}}
+{{- $logoWidth := .Site.Params.navbar.logo.width | default "20" -}}
+{{- $logoHeight := .Site.Params.navbar.logo.height | default "20" -}}
+{{- $logoDarkPath := .Site.Params.navbar.logo.dark | default $logoPath -}}
+
+<div class="hx:flex hx:items-center hx:ltr:mr-auto hx:rtl:ml-auto">
+  <a class="hx:flex hx:items-center hx:hover:opacity-75" href="{{ $logoLink }}">
+    {{- $displayTitle := (.Site.Params.navbar.displayTitle | default true) }}
+    {{- if (.Site.Params.navbar.displayLogo | default true) }}
+      <img class="hx:mr-2 hx:block hx:dark:hidden" src="{{ $logoPath | relURL }}" alt="{{ cond $displayTitle `Logo` .Site.Title }}" height="{{ $logoHeight }}" width="{{ $logoWidth }}" />
+      <img class="hx:mr-2 hx:hidden hx:dark:block" src="{{ $logoDarkPath | relURL }}" alt="{{ cond $displayTitle `Dark Logo` .Site.Title }}" height="{{ $logoHeight }}" width="{{ $logoWidth }}" />
+    {{- end }}
+    {{- if $displayTitle }}
+      <span class="hx:mr-2 hx:font-extrabold hx:inline hx:select-none">{{- .Site.Title -}}</span>
+    {{- end }}
+  </a>
+
+  {{- with .Site.Params.versions }}
+  <div class="hx:relative hx:inline-block">
+    <button
+      title="Version"
+      data-state="closed"
+      class="hextra-nav-menu-toggle hx:cursor-pointer hx:text-sm hx:whitespace-nowrap hx:p-2 hx:flex hx:items-center hx:gap-1 hx:text-gray-600 hx:hover:text-gray-800 hx:dark:text-gray-400 hx:dark:hover:text-gray-200"
+      type="button"
+      aria-label="Version"
+      aria-expanded="false"
+      aria-haspopup="menu"
+    >
+      <span>{{ .current }}</span>
+      {{- partial "utils/icon.html" (dict "name" "chevron-down" "attributes" "height=12 class=\"hx:transition-transform hx:duration-200 hx:ease-in-out\"") -}}
+    </button>
+    <ul
+      class="hextra-nav-menu-items hx:hidden hx:z-20 hx:max-h-64 hx:overflow-auto hx:rounded-lg hx:border hx:border-gray-200 hx:bg-white hx:p-1 hx:text-sm hx:shadow-lg hx:dark:border-neutral-700 hx:dark:bg-neutral-900"
+      style="min-width: 100px;"
+      role="menu"
+    >
+      {{- range .list }}
+      <li role="none" class="hextra-nav-menu-item hx:flex hx:flex-col">
+        <a
+          href="{{ .url }}"
+          role="menuitem"
+          class="hx:text-gray-600 hx:hover:text-gray-800 hx:dark:text-gray-400 hx:dark:hover:text-gray-200 hx:relative hx:cursor-pointer hx:whitespace-nowrap hx:rounded-sm hx:py-1.5 hx:transition-colors hx:ltr:pl-3 hx:ltr:pr-9 hx:rtl:pr-3 hx:rtl:pl-9 hx:flex hx:items-center hx:gap-1 hx:hover:bg-gray-100 hx:dark:hover:bg-neutral-800"
+        >
+          {{- .name -}}
+        </a>
+      </li>
+      {{- end }}
+    </ul>
+  </div>
+  {{- end }}
+</div>

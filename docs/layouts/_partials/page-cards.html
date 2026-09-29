@@ -1,0 +1,20 @@
+{{- /*
+  Copyright 2026 Rungar Authors
+  SPDX-License-Identifier: MIT
+
+  page-cards renders pages as a group of cards, each with the page's icon,
+  title and description, as its front matter gives them.
+
+  @param {slice} pages The pages, in the order to show them.
+  @param {int} cols The number of columns; 2 unless given.
+*/ -}}
+{{- $cards := "" -}}
+{{- range .pages -}}
+  {{- $cards = print $cards (partial "shortcodes/card.html" (dict
+    "link" .RelPermalink
+    "title" .LinkTitle
+    "icon" .Params.icon
+    "subtitle" .Description
+  )) -}}
+{{- end -}}
+{{- partial "shortcodes/cards.html" (dict "cols" (.cols | default 2) "content" ($cards | safeHTML)) -}}

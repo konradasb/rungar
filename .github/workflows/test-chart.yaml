@@ -1,0 +1,50 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: test-chart
+
+# The Helm chart, linted, and installed in a kind cluster with the image built
+# from the same commit, when it or what makes the image changes.
+on:
+  pull_request:
+    paths:
+      - charts/**
+      - Dockerfile
+      - .dockerignore
+      - Makefile
+      - .github/workflows/test-chart.yaml
+      - .github/workflows/chart.yaml
+  push:
+    branches: [main]
+    paths:
+      - charts/**
+      - Dockerfile
+      - .dockerignore
+      - Makefile
+      - .github/workflows/test-chart.yaml
+      - .github/workflows/chart.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Lint the chart
+        run: make lint-chart
+
+      - name: Test the chart
+        run: make test-chart

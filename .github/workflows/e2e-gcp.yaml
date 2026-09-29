@@ -1,0 +1,132 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: e2e-gcp
+
+# The end-to-end tests against GCP Compute Engine, nightly: the daemon runs on
+# the workflow's own runner, creates Spot instances in a test project, and
+# registers them with a test repository. A run creates a few for a few
+# minutes, well under $0.10. See DEVELOPMENT.md for what every e2e workflow
+# shares.
+#
+# Google Cloud is reached by workload identity federation, with no key, as a
+# service account that only this repository can act as. Once, in the test
+# project:
+#
+#   gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
+#   gcloud iam workload-identity-pools create github --location global
+#   gcloud iam workload-identity-pools providers create-oidc rungar \
+#     --location global --workload-identity-pool github \
+#     --issuer-uri https://token.actions.githubusercontent.com \
+#     --attribute-mapping 'google.subject=assertion.sub,attribute.repository_id=assertion.repository_id' \
+#     --attribute-condition "assertion.repository_id == '$(gh api repos/konradasb/rungar --jq .id)'"
+#   gcloud iam service-accounts create rungar-e2e-ci
+#   gcloud projects add-iam-policy-binding my-ci-test \
+#     --member serviceAccount:rungar-e2e-ci@my-ci-test.iam.gserviceaccount.com \
+#     --role roles/compute.instanceAdmin.v1
+#   gcloud iam service-accounts add-iam-policy-binding rungar-e2e-ci@my-ci-test.iam.gserviceaccount.com \
+#     --role roles/iam.workloadIdentityUser \
+#     --member "principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository_id/REPOSITORY_ID"
+#
+# The condition names the repository by its ID, which a rename or a new
+# repository of the same name does not take. Build the runner image in the
+# project, as docs/content/docs/providers/gcp/building-an-image.md says
+# (packer build -var project=my-ci-test build/runner-image/gcp), then set
+# the repository's variables:
+#
+#   RUNGAR_E2E_GCP_PROJECT                     the test project; unset, the
+#                                              workflow does nothing
+#   RUNGAR_E2E_GCP_WORKLOAD_IDENTITY_PROVIDER  projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/rungar
+#   RUNGAR_E2E_GCP_SERVICE_ACCOUNT             rungar-e2e-ci@my-ci-test.iam.gserviceaccount.com
+#   RUNGAR_E2E_GCP_ZONES                       optional; europe-west4-a,
+#                                              europe-west4-b by default
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs share the test scale set and installation, so one at a time.
+concurrency:
+  group: e2e-gcp
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    # A fork has neither the project nor the token.
+    if: vars.RUNGAR_E2E_GCP_PROJECT != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT: ${{ vars.RUNGAR_E2E_GCP_PROJECT }}
+      ZONES: ${{ vars.RUNGAR_E2E_GCP_ZONES || 'europe-west4-a, europe-west4-b' }}
+      GITHUB_URL: ${{ vars.RUNGAR_E2E_GITHUB_URL }}
+      CONFIG_DIR: /etc/rungar-e2e
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.RUNGAR_E2E_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.RUNGAR_E2E_GCP_SERVICE_ACCOUNT }}
+
+      # The token and the configuration are for root alone: the daemon runs
+      # as root, and the token is a secret.
+      - name: Write the configuration
+        env:
+          GITHUB_TOKEN_SECRET: ${{ secrets.RUNGAR_E2E_GITHUB_TOKEN }}
+          CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+        run: |
+          sudo install -d -m 0700 "$CONFIG_DIR"
+          printf '%s' "$GITHUB_TOKEN_SECRET" | sudo tee "$CONFIG_DIR/token" >/dev/null
+          sudo tee "$CONFIG_DIR/config.yaml" >/dev/null <<EOF
+          github:
+            url: $GITHUB_URL
+            token_path: $CONFIG_DIR/token
+          providers:
+            - name: gcp
+              type: gcp
+              project: $PROJECT
+              zones: [$ZONES]
+              credentials_file: $CREDENTIALS
+              max_runners: 2
+              runner:
+                image: projects/$PROJECT/global/images/family/actions-runner
+                machine_type: [e2-small, n2d-standard-2]
+                disk_size: 10GiB
+                disk_type: pd-standard
+                spot: true
+                labels: {rungar-e2e: ci}
+          EOF
+          sudo chmod 0600 "$CONFIG_DIR/token" "$CONFIG_DIR/config.yaml"
+
+      - name: Test
+        run: make test-e2e RUNGAR_E2E_HOST=local RUNGAR_E2E_CONFIG="$CONFIG_DIR/config.yaml"
+
+      # The tests remove their instances; this catches those a killed run
+      # left.
+      - name: Remove what a failed run left
+        if: always() && steps.auth.outcome == 'success'
+        run: |
+          gcloud compute instances list --project "$PROJECT" \
+            --filter='labels.rungar_sh_installation=rungar-e2e' \
+            --format='csv[no-heading](name,zone.basename())' |
+            while IFS=, read -r name zone; do
+              gcloud compute instances delete "$name" --project "$PROJECT" --zone "$zone" --quiet
+            done

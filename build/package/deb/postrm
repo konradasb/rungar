@@ -1,0 +1,21 @@
+#!/bin/sh
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar package's postrm. Purging removes the configuration, the
+# credentials kept beside it included, and the events; never the rungar user,
+# which files may still belong to, nor the runners on the fleet, which a
+# rungar installed again adopts.
+
+set -e
+
+case "$1" in
+remove)
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+  fi
+  ;;
+purge)
+  rm -rf /etc/rungar /var/log/rungar
+  ;;
+esac

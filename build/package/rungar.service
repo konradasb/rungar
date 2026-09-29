@@ -1,0 +1,83 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar service, as the deb and rpm packages install it. Put changes of
+# your own in a drop-in, /etc/systemd/system/rungar.service.d/, which an
+# upgrade leaves alone.
+
+[Unit]
+Description=Rungar, GitHub Actions runners as virtual machines
+Documentation=https://github.com/konradasb/rungar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rungar serve --config /etc/rungar/config.yaml
+# A changed configuration is taken up with 'systemctl restart rungar', which
+# disturbs no job. Check it first with 'rungar validate'.
+Restart=on-failure
+RestartSec=5
+
+# Every runner is left where it is when Rungar stops, and a Rungar that comes
+# back adopts it. Stopping is therefore quick: it closes its sessions with
+# GitHub, and exits.
+TimeoutStopSec=45
+
+# A static user, so that the credentials the configuration names can be
+# owned by root and readable by this group alone.
+User=rungar
+Group=rungar
+
+# Where the daemon serves the command line: /run/rungar/rungar.sock, which it
+# makes usable by this user and group alone. Run the rungar commands as root,
+# or as a member of the rungar group. It goes when the service stops.
+RuntimeDirectory=rungar
+RuntimeDirectoryMode=0750
+
+# Where the daemon keeps its events: /var/log/rungar/events.jsonl, which
+# rungar events shows, and which outlives the service. Rungar keeps no other
+# state: what it knows of runners is read back from the fleet on every start.
+LogsDirectory=rungar
+LogsDirectoryMode=0750
+
+# A provider that reaches a Dicer daemon on this machine by its socket needs
+# the group the socket belongs to; see api.socket.group in dicerd's
+# configuration.
+#SupplementaryGroups=dicer
+
+# 0750, so that the configuration and the credentials it names are readable
+# by the service and root, and nobody else. systemd complains if this
+# disagrees with what is on disk.
+ConfigurationDirectory=rungar
+ConfigurationDirectoryMode=0750
+
+# Hardening. Rungar is a network client and nothing else: it needs no devices,
+# no privileges, and nothing on disk but the configuration it reads and the
+# events it writes.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

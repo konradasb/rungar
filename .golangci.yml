@@ -1,0 +1,124 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# The linter set is curated rather than `default: all`.
+#
+# `all` enables linters that contradict each other and idiomatic Go --
+# varnamelen wants long names where the standard library uses short ones,
+# exhaustruct wants every field set explicitly, err113 forbids fmt.Errorf,
+# wsl dictates blank-line placement. A configuration nobody can satisfy is a
+# linter that is effectively switched off, so this file enables what catches
+# real defects and says why anything notable is left out.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Core correctness.
+    - errcheck # unchecked errors
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Common defect classes.
+    - nilerr # returning nil after a non-nil error
+    - errorlint # == on errors instead of errors.Is; %v instead of %w
+    - forcetypeassert # unchecked type assertions panic
+    - contextcheck # dropping an inherited context
+    - bodyclose
+    - noctx # HTTP requests without a context
+    - nilnil
+    - durationcheck
+    - makezero
+
+    # API and idiom.
+    - protogetter # use generated getters; they are nil-safe
+    - modernize # keep up with new stdlib idiom
+    - unconvert
+    - copyloopvar
+    - intrange
+    - errname
+    - misspell
+    - predeclared # shadowing builtins
+    - revive
+    - godot # doc comments end in a period
+    - whitespace
+    - usestdlibvars # http.StatusNoContent, not 204
+    - nolintlint # every //nolint names its linter and says why
+
+    # Security.
+    - gosec
+
+    # Performance, where it is free.
+    - perfsprint
+    - prealloc
+
+  settings:
+    revive:
+      rules:
+        # Without checkPrivateReceivers: methods on unexported types are an
+        # implementation detail, and requiring doc comments on them produces
+        # noise rather than documentation.
+        - name: exported
+        - name: package-comments
+        - name: indent-error-flow
+        - name: error-strings
+        - name: error-return
+        - name: receiver-naming
+        - name: increment-decrement
+        - name: var-declaration
+        - name: range
+        - name: errorf
+        - name: unexported-return
+        - name: time-naming
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    gosec:
+      excludes:
+        # File permissions are deliberate and reviewed; paths are daemon-owned.
+        - G306
+        # Subprocesses are launched with fixed, non-user-controlled binaries.
+        - G204
+    staticcheck:
+      checks: ["all"]
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+  exclusions:
+    rules:
+      # Tests may ignore errors from helpers and use fixed credentials.
+      - path: _test\.go
+        linters: [errcheck, gosec, prealloc]
+      # Configuration files -- the GitHub App key, the client identity -- are
+      # opened by a path the operator gave in the configuration file, which is
+      # as trusted as the binary itself.
+      - linters: [gosec]
+        text: "G304"
+      # Sizes and counts are bounded by request validation before they reach
+      # these conversions; G115 fires on every int-to-int32 regardless.
+      - linters: [gosec]
+        text: "G115"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - gci # exactly three import groups: standard, third-party, this module
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/konradasb/rungar
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule

@@ -1,0 +1,586 @@
+// Copyright 2026 Rungar Authors
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package rungar.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/konradasb/rungar/proto/rungar/v1;rungarv1";
+
+// RungarService is a running daemon, as the command line sees it: what it runs
+// and what it knows of its scale sets, providers and runners. It is served on
+// a Unix socket, whose permissions decide who may use it.
+//
+// A failed call ends with a status whose code says what kind of failure it
+// was, and whose message says it for a person:
+//
+// - `NOT_FOUND`: no scale set, provider or runner of that name.
+// - `INVALID_ARGUMENT`: the request is malformed, or asks for something the
+//   configuration rules out, such as removing a configured scale set.
+// - `FAILED_PRECONDITION`: the thing is busy: a runner running a job.
+// - `RESOURCE_EXHAUSTED`: no provider has room.
+// - `UNAVAILABLE`: a scale set is still starting, something it needs
+//   cannot be reached, or a follower of the events fell behind. Trying
+//   again may work.
+// - `CANCELED`, `DEADLINE_EXCEEDED`: the call was cancelled, or ran out of
+//   time, before it finished.
+// - `INTERNAL`: anything else: the daemon failed.
+//
+// A status gRPC itself raises, such as `UNIMPLEMENTED` for a method this
+// daemon does not have, arrives as it is.
+service RungarService {
+  // GetStatus returns everything at once: the daemon, its scale sets, its
+  // providers and the runners on them.
+  rpc GetStatus(GetStatusRequest) returns (DaemonStatus);
+
+  // ListScaleSets returns the configured scale sets, and those found only by
+  // their runners on the fleet, each with what GitHub has of it.
+  rpc ListScaleSets(ListScaleSetsRequest) returns (ListScaleSetsResponse);
+  // GetScaleSet returns one scale set, configured or not, with what GitHub
+  // has of it.
+  rpc GetScaleSet(GetScaleSetRequest) returns (ScaleSet);
+  // RemoveScaleSet removes a scale set no longer configured: the runners it
+  // can, and, once none is left running a job, the scale set on GitHub.
+  // Called again, it carries on where it left off.
+  rpc RemoveScaleSet(RemoveScaleSetRequest) returns (RemoveScaleSetResponse);
+  // Reconcile compares the named scale sets, or every one, with the fleet
+  // now, and returns them afterwards.
+  rpc Reconcile(ReconcileRequest) returns (ReconcileResponse);
+  // PauseScaleSet stops a configured scale set taking jobs, until it is
+  // resumed or the daemon restarts: GitHub is told it has no room, no
+  // runner is created, its idle runners are removed and its busy ones are
+  // left to finish. It returns the scale set.
+  rpc PauseScaleSet(PauseScaleSetRequest) returns (ScaleSet);
+  // ResumeScaleSet has a paused scale set take jobs again.
+  rpc ResumeScaleSet(ResumeScaleSetRequest) returns (ScaleSet);
+
+  // ListProviders returns every provider, in configuration order.
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  // GetProvider returns one provider.
+  rpc GetProvider(GetProviderRequest) returns (Provider);
+  // DisableProvider takes a provider out of placement, leaving the runners
+  // on it to finish, until it is enabled or the daemon restarts.
+  rpc DisableProvider(DisableProviderRequest) returns (Provider);
+  // EnableProvider puts a provider back into placement.
+  rpc EnableProvider(EnableProviderRequest) returns (Provider);
+
+  // ListRunners returns this installation's runners on the fleet.
+  rpc ListRunners(ListRunnersRequest) returns (ListRunnersResponse);
+  // RemoveRunner removes a runner: its registration first, which GitHub
+  // refuses for a runner running a job, then its machine. It returns the
+  // runner as it was.
+  rpc RemoveRunner(RemoveRunnerRequest) returns (Runner);
+
+  // ListEvents streams what the daemon has done to runners, providers and
+  // scale sets: the history kept, oldest first, in batches, then, with
+  // follow, each new event as it happens, none missed between the two. A
+  // follower that does not keep up is disconnected with UNAVAILABLE rather
+  // than slowing the daemon.
+  rpc ListEvents(ListEventsRequest) returns (stream ListEventsResponse);
+}
+
+message GetStatusRequest {}
+
+// DaemonStatus is the daemon and everything it runs.
+message DaemonStatus {
+  Daemon daemon = 1;
+  // The configured scale sets, in configuration order. What GitHub has of
+  // each is not asked for: see ListScaleSets.
+  repeated ScaleSet scale_sets = 2;
+  // The providers, in configuration order.
+  repeated Provider providers = 3;
+  // The installation's runners on the fleet.
+  repeated Runner runners = 4;
+  // Providers that could not be listed, by name, with why: their runners
+  // are missing from runners.
+  map<string, string> unreachable_providers = 5;
+  reserved 6;
+  reserved "github_error";
+}
+
+// Daemon is the running daemon.
+message Daemon {
+  string version = 1;
+  string commit = 2;
+  // When the process started, and the configuration it runs from was
+  // loaded.
+  google.protobuf.Timestamp start_time = 3;
+  // The configuration file it runs from.
+  string config_file = 5;
+  // What this installation is called, and put on every runner.
+  string installation = 6;
+  GitHub github = 7;
+  reserved 4;
+}
+
+// GitHub is where the scale sets live and how the daemon authenticates.
+message GitHub {
+  // The enterprise, organisation or repository URL.
+  string url = 1;
+  // What url names: repository, organisation or enterprise.
+  string scope = 2;
+  // How the daemon authenticates, with nothing secret in it.
+  string credentials = 3;
+  // Why GitHub did not answer the daemon with them when the status was
+  // asked: its refusal, or why it could not be reached. Empty when it
+  // answered. The same as ListRunnersResponse.github_error.
+  string error = 4;
+}
+
+message ListScaleSetsRequest {}
+
+message ListScaleSetsResponse {
+  repeated ScaleSet scale_sets = 1;
+  // Providers that could not be listed, by name, with why: a scale set whose
+  // only runners are on one is missing, and runner counts are short.
+  map<string, string> unreachable_providers = 2;
+}
+
+message GetScaleSetRequest {
+  string name = 1;
+  // The runner group to look for it in on GitHub. Empty is the configured
+  // one, or Default.
+  string runner_group = 2;
+}
+
+// ScaleSet is one scale set: what the configuration says of it, what the
+// daemon is doing with it, and what GitHub has of it.
+message ScaleSet {
+  string name = 1;
+  // Whether the configuration has it.
+  bool configured = 2;
+
+  // What the configuration says, for a configured one.
+
+  // Every label workflows may target it by, its name first.
+  repeated string labels = 3;
+  // Its providers, in its order.
+  repeated string providers = 4;
+  // spread or pack.
+  string placement = 5;
+  // What each of its providers makes of its runner block, in its order.
+  repeated RunnerSize runner_sizes = 6;
+  // The min_runners in force now: that of the schedule's window in force,
+  // or configured_min_runners outside every window.
+  int32 min_runners = 7;
+  int32 max_runners = 8;
+  int32 priority = 9;
+  string runner_group = 10;
+  // The runs-on line that targets it, as a workflow writes it.
+  string runs_on = 11;
+
+  // What the daemon is doing with it, for a configured one.
+
+  ScaleSetPhase phase = 12;
+  // How many runners GitHub's latest statistics call for.
+  int32 desired_runners = 13;
+  // Its runners the daemon knows of, by state.
+  RunnerCounts runner_counts = 14;
+  // Why it is holding back from placing a runner, if it is: a scale set of
+  // higher priority on one of its providers is waiting for room.
+  string holding_back_reason = 15;
+
+  // How many of its runners are on the fleet, as the providers list them.
+  int32 fleet_runners = 16;
+
+  // What GitHub has of it. Absent from GetStatus, which does not ask.
+  GitHubScaleSet github = 17;
+
+  // Whether it is paused now: taking no jobs, creating no runners.
+  bool paused = 18;
+  // Whether the configuration has it paused. Where this differs from
+  // paused, it was paused or resumed while the daemon ran, and goes back to
+  // this when the daemon restarts.
+  bool configured_paused = 19;
+  // The min_runners the configuration gives it outside its schedule's
+  // windows.
+  int32 configured_min_runners = 20;
+  // Its schedule, which sets min_runners by time of day; absent if it has
+  // none.
+  Schedule schedule = 21;
+}
+
+// Schedule sets a scale set's min_runners by time of day.
+message Schedule {
+  // The IANA time zone the windows are in, such as Europe/Vilnius.
+  string time_zone = 1;
+  // The windows, in order: the first containing a time is in force at it.
+  repeated ScheduleWindow windows = 2;
+}
+
+// ScheduleWindow is a time of the week when a scale set keeps a number of
+// runners ready.
+message ScheduleWindow {
+  // The days it opens on, as the configuration writes them: mon-fri,sun.
+  string days = 1;
+  // When it opens and closes, as HH:MM. A window closing earlier than it
+  // opens closes the next day.
+  string from = 2;
+  string to = 3;
+  int32 min_runners = 4;
+  // Whether it is the window in force now.
+  bool in_force = 5;
+}
+
+// ScaleSetPhase is how far a configured scale set is from taking jobs.
+enum ScaleSetPhase {
+  SCALE_SET_PHASE_UNSPECIFIED = 0;
+  // Being looked up or created on GitHub, and its runners adopted.
+  SCALE_SET_PHASE_STARTING = 1;
+  // Waiting for another daemon's message session on it to end.
+  SCALE_SET_PHASE_WAITING_FOR_SESSION = 2;
+  // Taking jobs.
+  SCALE_SET_PHASE_LISTENING = 3;
+  // Trying for its message session while GitHub does not answer.
+  SCALE_SET_PHASE_GITHUB_UNREACHABLE = 4;
+  // Waiting for the daemon to hold the message session of the lead scale
+  // set, the first configured, which decides which daemon serves them all.
+  SCALE_SET_PHASE_WAITING_FOR_LEAD = 5;
+}
+
+// RunnerSize is what one provider makes of a scale set's runner block.
+message RunnerSize {
+  string provider = 1;
+  // How big the runner is, as its provider describes it: "4 vCPU, 8 GiB",
+  // or a cloud's machine type.
+  string description = 2;
+}
+
+// RunnerCounts are runners by what they are doing.
+message RunnerCounts {
+  int32 starting = 1;
+  int32 idle = 2;
+  int32 busy = 3;
+}
+
+// GitHubScaleSet is what GitHub has of a scale set.
+message GitHubScaleSet {
+  // Whether GitHub has one of that name in the runner group it was looked
+  // for in.
+  bool found = 1;
+  // Why GitHub could not be asked, if it could not.
+  string error = 2;
+  int64 id = 3;
+  string runner_group = 4;
+  // The labels GitHub keeps for it, which it never changes once created.
+  repeated string labels = 5;
+  google.protobuf.Timestamp create_time = 6;
+  ScaleSetStatistics statistics = 7;
+}
+
+// ScaleSetStatistics are GitHub's numbers for a scale set.
+message ScaleSetStatistics {
+  int32 assigned_jobs = 1;
+  int32 running_jobs = 2;
+  int32 registered_runners = 3;
+  int32 busy_runners = 4;
+  int32 idle_runners = 5;
+}
+
+message RemoveScaleSetRequest {
+  string name = 1;
+  // The runner group it is in on GitHub. Empty is Default.
+  string runner_group = 2;
+}
+
+// RemoveScaleSetResponse is what one RemoveScaleSet did.
+message RemoveScaleSetResponse {
+  // The runners removed.
+  repeated Runner removed = 1;
+  // How many runners are running jobs, and were left to finish them. While
+  // any is, the scale set is left on GitHub.
+  int32 busy_left = 2;
+  // The ID of the scale set removed from GitHub, or 0 when it was not: some
+  // runners are busy, or GitHub has no scale set of that name in the runner
+  // group.
+  int64 scale_set_id = 3;
+}
+
+message PauseScaleSetRequest {
+  string name = 1;
+}
+
+message ResumeScaleSetRequest {
+  string name = 1;
+}
+
+message ReconcileRequest {
+  // The scale sets to reconcile. Empty is every one.
+  repeated string scale_sets = 1;
+}
+
+message ReconcileResponse {
+  // The scale sets, as they are once reconciled.
+  repeated ScaleSet scale_sets = 1;
+}
+
+message ListProvidersRequest {}
+
+message ListProvidersResponse {
+  repeated Provider providers = 1;
+}
+
+message GetProviderRequest {
+  string name = 1;
+}
+
+message DisableProviderRequest {
+  string name = 1;
+}
+
+message EnableProviderRequest {
+  string name = 1;
+}
+
+// Provider is one backend runners are placed on, as placement sees it now.
+message Provider {
+  string name = 1;
+  // Its type: aws, dicer, gcp or proxmox.
+  string type = 2;
+  // What it is reached at.
+  string endpoint = 3;
+  // Its placement weight, 1 unless configured.
+  double weight = 4;
+
+  // Whether it is out of placement now.
+  bool disabled = 5;
+  // Whether the configuration has it out of placement. Where this differs
+  // from disabled, it was disabled or enabled while the daemon ran, and
+  // goes back to this when the daemon restarts.
+  bool configured_disabled = 6;
+
+  // Whether it was reachable when last asked, and why not if it was not.
+  bool reachable = 7;
+  string error = 8;
+
+  reserved 9, 10, 11;
+  reserved "passed_over_for", "failures", "refusal";
+
+  // A scale set that found it full holding lower priorities back from it,
+  // if one is.
+  Hold hold = 12;
+
+  // This installation's runners on it.
+  int32 runner_count = 13;
+  // The most runners it may have, of every scale set, or 0 for no limit.
+  int32 max_runners = 14;
+  // The configured scale sets placed on it, in configuration order, and how
+  // it stands for each.
+  repeated ProviderScaleSet scale_sets = 16;
+
+  reserved 15;
+  reserved "placements";
+}
+
+// ProviderScaleSet is how a provider stands for one scale set placed on it.
+message ProviderScaleSet {
+  string scale_set = 1;
+  // How long the scale set will keep skipping the provider after it
+  // refused the scale set's runner. Absent when it tries it.
+  google.protobuf.Duration backoff_for = 4;
+  // How many times in a row the provider refused, and why it last did.
+  int32 refusals = 8;
+  string refusal = 9;
+  // Whether the last refusal said the provider was full.
+  bool full = 7;
+
+  reserved 2, 3, 5, 6;
+  reserved "full_for", "refused", "failures", "failure";
+}
+
+// Hold is a scale set keeping lower priorities off a provider until it finds
+// room.
+message Hold {
+  string scale_set = 1;
+  int32 priority = 2;
+  // How long it lasts unless renewed.
+  google.protobuf.Duration remaining = 3;
+}
+
+message ListRunnersRequest {
+  // Only this scale set's runners.
+  string scale_set = 1;
+  // Only the runners on this provider.
+  string provider = 2;
+}
+
+message ListRunnersResponse {
+  repeated Runner runners = 1;
+  // Providers that could not be listed, by name, with why.
+  map<string, string> unreachable_providers = 2;
+  // Why GitHub could not be asked what the runners are doing, if it could
+  // not.
+  string github_error = 3;
+}
+
+message RemoveRunnerRequest {
+  string name = 1;
+}
+
+// Runner is one runner: its machine, what the daemon knows of it, and what
+// GitHub says it is doing.
+message Runner {
+  string name = 1;
+  string scale_set = 2;
+  string provider = 3;
+  // What the daemon knows it to be doing. Unspecified for a runner of a
+  // scale set it does not run.
+  RunnerState state = 4;
+  // The machine's state, as its provider says it.
+  MachineState machine_state = 5;
+  // What GitHub says it is doing. Unspecified when GitHub was not asked.
+  RunnerGitHubStatus github_status = 6;
+  google.protobuf.Timestamp create_time = 8;
+  // The job it is running, when the daemon knows it is busy. Unset for a
+  // runner that took its job before the daemon started.
+  RunnerJob job = 9;
+
+  reserved 7;
+  reserved "job_id";
+}
+
+// RunnerJob is the job a runner is running, as GitHub described it when the
+// job started.
+message RunnerJob {
+  // GitHub's ID of the job.
+  string id = 1;
+  // The repository whose workflow the job is of, as owner/name.
+  string repository = 2;
+  // The workflow file and ref the job is of:
+  // owner/name/.github/workflows/ci.yaml@refs/heads/main.
+  string workflow_ref = 3;
+  // The job's name, as the workflow run shows it.
+  string display_name = 4;
+  // The workflow run the job is of.
+  int64 workflow_run_id = 5;
+  // When GitHub assigned the job to the runner.
+  google.protobuf.Timestamp start_time = 6;
+}
+
+// RunnerState is what the daemon knows a runner to be doing.
+enum RunnerState {
+  RUNNER_STATE_UNSPECIFIED = 0;
+  // Created, and not yet connected to GitHub.
+  RUNNER_STATE_STARTING = 1;
+  // Connected, and waiting for a job.
+  RUNNER_STATE_IDLE = 2;
+  // Running a job.
+  RUNNER_STATE_BUSY = 3;
+}
+
+// MachineState is the state of a runner's machine.
+enum MachineState {
+  MACHINE_STATE_UNSPECIFIED = 0;
+  // Booting.
+  MACHINE_STATE_STARTING = 1;
+  // Up.
+  MACHINE_STATE_RUNNING = 2;
+  // Ended, stopped or failed, for good.
+  MACHINE_STATE_STOPPED = 3;
+}
+
+// RunnerGitHubStatus is what GitHub says of a runner.
+enum RunnerGitHubStatus {
+  RUNNER_GITHUB_STATUS_UNSPECIFIED = 0;
+  // Registered, and running a job.
+  RUNNER_GITHUB_STATUS_BUSY = 1;
+  // Registered, connected and waiting.
+  RUNNER_GITHUB_STATUS_IDLE = 2;
+  // Registered, and not connected.
+  RUNNER_GITHUB_STATUS_OFFLINE = 3;
+  // GitHub has no runner of that name.
+  RUNNER_GITHUB_STATUS_NOT_REGISTERED = 4;
+}
+
+// ListEventsRequest picks events: every one, unless narrowed.
+message ListEventsRequest {
+  // Only the events of this scale set.
+  string scale_set = 1;
+  // Only the events on this provider: of its runners, and of it.
+  string provider = 2;
+  // Only the events of the runner of this name.
+  string runner = 3;
+  // Only the events since this time.
+  google.protobuf.Timestamp since = 4;
+  // Only the last this many of the history. 0 is all of it.
+  int32 limit = 5;
+  // Keep the stream open, sending each new event as it happens.
+  bool follow = 6;
+}
+
+message ListEventsResponse {
+  repeated Event events = 1;
+  // Set on the last batch of the history, after which, with follow, each
+  // response is a new event.
+  bool caught_up = 2;
+}
+
+// Event is one thing the daemon did, or found, to one runner, provider or
+// scale set.
+message Event {
+  google.protobuf.Timestamp time = 1;
+  EventKind kind = 2;
+  // The runner's, the provider's or the scale set's.
+  string name = 3;
+  EventAction action = 4;
+  // The scale set it happened for.
+  string scale_set = 5;
+  // The provider it happened on: a runner's, or the provider itself.
+  string provider = 6;
+  // What happened, in a line, for a person.
+  string message = 7;
+  // What happened, for a program, as each action has it: create_duration for
+  // created; boot_duration for connected; job_id, repository and, when
+  // GitHub gave them, workflow_run_id, wait and runner_wait for job started;
+  // reason for removed and lost; runner, error and skipped_for for full and
+  // failing, and for failing refusals, how many runners in a row the
+  // provider has refused; from, to and, inside a window, window for min
+  // runners changed.
+  // Durations are Go durations.
+  map<string, string> attributes = 8;
+}
+
+// EventKind is the kind of thing an event is about.
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  EVENT_KIND_RUNNER = 1;
+  EVENT_KIND_PROVIDER = 2;
+  EVENT_KIND_SCALE_SET = 3;
+}
+
+// EventAction is what happened to it.
+enum EventAction {
+  EVENT_ACTION_UNSPECIFIED = 0;
+  // A runner created by the daemon.
+  EVENT_ACTION_CREATED = 1;
+  // A runner found on the fleet: left by an earlier daemon, or missed.
+  EVENT_ACTION_ADOPTED = 2;
+  // A runner the daemon removed, deleting its machine.
+  EVENT_ACTION_REMOVED = 3;
+  // A runner that ended without the daemon removing it or its job
+  // completing: its machine ended on its own, or its provider became
+  // unreachable.
+  EVENT_ACTION_LOST = 4;
+  // A provider a scale set found full, which it skips for a while, trying
+  // its next provider meanwhile.
+  EVENT_ACTION_FULL = 6;
+  // A provider that refused to create a scale set's runner, which it skips
+  // for a while, trying its next provider meanwhile.
+  EVENT_ACTION_FAILING = 8;
+  // A scale set paused: taking no jobs, and creating no runners.
+  EVENT_ACTION_PAUSED = 9;
+  // A paused scale set resumed: taking jobs again.
+  EVENT_ACTION_RESUMED = 10;
+  // A runner the daemon created that connected to GitHub.
+  EVENT_ACTION_CONNECTED = 11;
+  // A runner that took a job.
+  EVENT_ACTION_JOB_STARTED = 12;
+  // A scale set whose schedule changed the min_runners in force.
+  EVENT_ACTION_MIN_RUNNERS_CHANGED = 13;
+
+  reserved 5, 7;
+  reserved "EVENT_ACTION_PASSED_OVER", "EVENT_ACTION_CANNOT_MAKE";
+}

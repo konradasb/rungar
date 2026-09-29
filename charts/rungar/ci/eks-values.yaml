@@ -1,0 +1,26 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# The default, with the service account an IAM role for a service account
+# on EKS would use: annotated with the role, and named. Outside EKS the
+# annotation does nothing, so the daemon runs as in the default.
+image:
+  repository: rungar-chart-test
+  tag: dev
+  pullPolicy: Never
+config:
+  version: 1
+  github:
+    url: https://github.com/my-org
+    token_path: /etc/rungar/token
+  providers:
+    - name: compute1
+      type: dicer
+      address: dicer.invalid:7443
+files:
+  token: ghp_notarealtoken
+serviceAccount:
+  name: rungar-eks
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/rungar
