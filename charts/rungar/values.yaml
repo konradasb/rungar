@@ -1,0 +1,155 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# The Rungar daemon, rungar, as one pod. It keeps no state of its own: every
+# runner is found again on the fleet by its labels when the pod starts, so a
+# pod replaced, rescheduled or upgraded disturbs no job. There is one replica,
+# always, replaced rather than rolled: two daemons serving the same scale sets
+# at once would each make runners for them.
+
+image:
+  repository: ghcr.io/konradasb/rungar
+  # Unset is the chart's appVersion: the release the chart was published
+  # with.
+  tag: ""
+  # A digest pins the image to its content, whatever the tag says:
+  # sha256:...
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The configuration, /etc/rungar/config.yaml: what example.yml in the
+# repository describes. It is kept in a Secret, as it names, or holds, the
+# GitHub credential.
+#
+# The socket and the events are where the pod gives them room, at their
+# defaults, so leave socket and events.file unset.
+config: {}
+#  github:
+#    url: https://github.com/my-org
+#    app_client_id: Iv1.abc123
+#    app_installation_id: 12345678
+#    app_private_key_path: /etc/rungar/app.pem
+#  providers:
+#    - name: compute1
+#      type: dicer
+#      address: 10.10.0.101:7443
+#      tls:
+#        ca_file: /etc/rungar/ca.pem
+#        cert_file: /etc/rungar/client.pem
+#        key_file: /etc/rungar/client-key.pem
+#      runner:
+#        image: ghcr.io/actions/actions-runner:latest
+#  scale_sets:
+#    - name: rungar-c2-m4
+#      max_runners: 12
+#      providers:
+#        - name: compute1
+#          runner: {vcpus: 2, memory: 4GiB}
+
+# The configuration as a file instead, left as it is written, anchors and
+# comments and all: --set-file configFile=config.yaml. Set this or config,
+# not both.
+configFile: ""
+
+# Files put beside the configuration, in /etc/rungar, and kept in the same
+# Secret: the credentials and TLS material the configuration names, by file
+# name. For instance --set-file files.app\.pem=app.pem.
+files: {}
+
+# A Secret of your own to use instead of config and files, such as one an
+# external secrets operator keeps: its keys are the files in /etc/rungar, and
+# config.yaml is the configuration. With it, the chart makes no Secret.
+existingSecret: ""
+
+# Prometheus metrics. Enabling them has the daemon serve them on all of the
+# pod's addresses, on this port, and puts a Service in front. The endpoint
+# has nothing to authenticate with: restrict who can reach it with a
+# NetworkPolicy. With existingSecret, set metrics.enable and metrics.listen
+# in that configuration yourself.
+metrics:
+  enabled: false
+  port: 9102
+  service:
+    annotations: {}
+  # A ServiceMonitor, for the Prometheus Operator.
+  serviceMonitor:
+    enabled: false
+    interval: ""
+    scrapeTimeout: ""
+    labels: {}
+
+# What the daemon did to runners, providers and scale sets, which rungar events shows,
+# kept in /var/log/rungar. Without persistence they go with the pod; with it,
+# a PersistentVolumeClaim keeps them across one.
+events:
+  persistence:
+    enabled: false
+    # A claim of your own, instead of one the chart makes.
+    existingClaim: ""
+    # Unset uses the cluster's default storage class; "-" asks for none.
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+
+serviceAccount:
+  create: true
+  # Unset is the release's full name.
+  name: ""
+  annotations: {}
+
+# Rungar talks to GitHub and to its providers, never to the Kubernetes API.
+automountServiceAccountToken: false
+
+# Added to the daemon's environment: HTTPS_PROXY and NO_PROXY, say. A proxy
+# applies to the providers reached over the network too, so list them in
+# NO_PROXY if they are to be reached directly.
+env: []
+#  - name: HTTPS_PROXY
+#    value: http://proxy.internal:3128
+
+# Once asked to stop, the daemon closes each scale set's session with GitHub
+# and exits, leaving every runner where it is.
+terminationGracePeriodSeconds: 45
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+
+# The image's nonroot user, which owns what the daemon writes. The fsGroup
+# gives it the configuration's Secret, which is readable by its group alone.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# More volumes, and where the daemon has them: a CSI secret store, say.
+extraVolumes: []
+extraVolumeMounts: []

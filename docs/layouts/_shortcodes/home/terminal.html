@@ -1,0 +1,25 @@
+{{- /*
+  Copyright 2026 Rungar Authors
+  SPDX-License-Identifier: MIT
+
+  A terminal window showing a session: a line starting with "$ " is a
+  command, any other line its output.
+
+  @param {string} title The window's title.
+*/ -}}
+<figure class="rungar-terminal not-prose">
+  <div class="rungar-terminal-bar" aria-hidden="true">
+    <span></span><span></span><span></span>
+    <em>{{ .Get "title" | default "bash" }}</em>
+  </div>
+  <pre>
+    {{- range $i, $line := split (trim .Inner "\n") "\n" -}}
+      {{- if $i }}{{ "\n" }}{{ end -}}
+      {{- if hasPrefix $line "$ " -}}
+        <span class="rungar-prompt">$</span> <span class="rungar-command">{{ strings.TrimPrefix "$ " $line }}</span>
+      {{- else -}}
+        <span class="rungar-output">{{ $line }}</span>
+      {{- end -}}
+    {{- end -}}
+  </pre>
+</figure>

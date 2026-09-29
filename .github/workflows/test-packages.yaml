@@ -1,0 +1,58 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: test-packages
+
+# The deb and rpm packages, built as a release builds them and installed
+# from a test repository on each distribution the documentation names, when
+# what makes them changes.
+on:
+  pull_request:
+    paths:
+      - build/**
+      - .goreleaser.yml
+      - Makefile
+      - .github/workflows/test-packages.yaml
+      - .github/workflows/packages.yaml
+      - .github/workflows/release.yaml
+  push:
+    branches: [main]
+    paths:
+      - build/**
+      - .goreleaser.yml
+      - Makefile
+      - .github/workflows/test-packages.yaml
+      - .github/workflows/packages.yaml
+      - .github/workflows/release.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          # As for a release, which this builds as: nothing another run
+          # could have planted in the shared cache.
+          cache: false
+
+      - name: Build the packages
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=sign,sbom,archive
+
+      - name: Test the packages
+        run: build/test-packages.sh dist

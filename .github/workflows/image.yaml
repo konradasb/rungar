@@ -1,0 +1,105 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: image
+
+# A published release's container image goes to ghcr.io/konradasb/rungar, for
+# linux/amd64 and linux/arm64, signed with cosign. It waits for the release to
+# be published rather than drafted, so that nothing is pulled as `latest`
+# before a maintainer has reviewed it; a pre-release gets its version tag and
+# not `latest`. Run by hand to publish a release's image again.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release to publish, such as v0.2.0
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # To push to the repository's package.
+      packages: write
+      # To sign the image with cosign, keyless, as this workflow.
+      id-token: write
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      IMAGE: ghcr.io/${{ github.repository }}
+      # A hand-run publish is of a release, not a pre-release, unless the
+      # tag says otherwise.
+      LATEST: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Describe the build
+        id: build
+        run: |
+          {
+            echo "commit=$(git rev-parse --short HEAD)"
+            echo "date=$(git show -s --format=%cI HEAD)"
+            echo "version=${TAG#v}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1.2.3 and 1.2 for a release, 1.2.3-rc.1 alone for a pre-release, and
+      # latest for a release that is not a pre-release.
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=raw,value=latest,enable=${{ env.LATEST == 'true' && !contains(env.TAG, '-') }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.build.outputs.version }}
+            COMMIT=${{ steps.build.outputs.commit }}
+            BUILD_DATE=${{ steps.build.outputs.date }}
+          provenance: mode=max
+          sbom: true
+
+      # Signed by digest, which covers every tag pointing at it.
+      - name: Sign
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"

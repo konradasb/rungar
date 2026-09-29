@@ -1,0 +1,15 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The Rungar repository, for dnf and zypper:
+#
+#   sudo curl -fsSL -o /etc/yum.repos.d/rungar.repo https://pkg.rungar.sh/rpm/rungar.repo
+#   sudo zypper addrepo https://pkg.rungar.sh/rpm/rungar.repo
+
+[rungar]
+name=Rungar
+baseurl=https://pkg.rungar.sh/rpm
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://pkg.rungar.sh/gpg.key

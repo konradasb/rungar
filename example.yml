@@ -1,0 +1,249 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+# Example Rungar daemon configuration.
+
+# How often the fleet is compared with what the daemon thinks is on it. This
+# is what catches a VM that was killed, a host that rebooted, and a runner
+# whose registration GitHub dropped -- none of which produces a message from
+# GitHub.
+reconcile_interval: 30s
+
+# A change to this file is taken up by restarting the daemon, which disturbs
+# no job, because every runner is left where it is and adopted. Check a
+# changed file first with 'rungar validate'.
+
+github:
+  # The enterprise, organisation or repository the scale sets belong to.
+  # A GitHub Enterprise Server URL works here too.
+  url: https://github.com/my-org
+
+  # A GitHub App installation, which is the credential to prefer: it is
+  # scoped to what it needs, and GitHub rotates it.
+  app_client_id: Iv1.abc123
+  app_installation_id: 12345678
+
+  # The App's private key, as a path or inline. A path is usually better: it
+  # keeps the key out of this file, so whatever manages secrets on this host
+  # stays in charge of it and the key can be rotated without an edit.
+  app_private_key_path: /etc/rungar/app.pem
+
+  # Inline is there for where that is awkward -- a container image built with
+  # its configuration, a secret injected as one blob -- and makes this file
+  # itself a secret, to be permissioned as one.
+  #
+  # app_private_key: |
+  #   -----BEGIN RSA PRIVATE KEY-----
+  #   ...
+  #   -----END RSA PRIVATE KEY-----
+
+  # A personal access token instead, as a path or inline. Simpler than an App,
+  # and scoped far more broadly. Configure one or the other, never both.
+  #
+  # token_path: /etc/rungar/token
+  # token: ghp_...
+
+# Names this Rungar, and is put on every runner it creates, so that two
+# installations sharing a fleet never adopt each other's runners. Unset
+# derives one from github.url, which is right unless two installations serve
+# the same GitHub.
+# installation: rungar-prod
+
+# What runners are placed on. Each provider is one backend that makes machines
+# -- a Dicer host, a cloud account -- and decides for itself where on it a
+# machine goes; Rungar chooses only between providers. Its name, type, weight,
+# max_runners, disabled and runner block are Rungar's, the same on every type;
+# the rest is its type's to read.
+#
+# Settings several providers share are written once, with a YAML anchor, and
+# brought into the others with a merge key: a Dicer host is a provider of its
+# own, so a fleet of them is one entry each.
+providers:
+  - &dicer
+    name: compute1
+    type: dicer
+
+    # The dicerd, on its api.tcp.listen address. A dicerd on this machine
+    # can be named by its socket instead: unix:///run/dicer/dicer.sock.
+    address: 10.10.0.101:7443
+
+    # Whoever can reach a Dicer host's API has full control of that host.
+    # Serve it with TLS and client certificates (api.tcp.tls on the dicerd),
+    # and give Rungar the matching material here. Without TLS the connection
+    # is plaintext and authenticates neither end, so the network it crosses
+    # is part of the host's security boundary.
+    tls:
+      # The authority the host's certificate is checked against.
+      ca_file: /etc/rungar/ca.pem
+      # Rungar's own certificate, for a host that requires one.
+      cert_file: /etc/rungar/client.pem
+      key_file: /etc/rungar/client-key.pem
+
+    # Bounds one call to the host, so that one slow daemon does not hold up a
+    # look at the others. Unset is 10s.
+    # timeout: 30s
+
+    # What every scale set on this provider starts from. A scale set's
+    # runner block for this provider is written over it: a key the scale set gives replaces
+    # this one, a mapping such as env is merged key by key, a list such as
+    # mounts is replaced whole, and a key set to null is cleared. So a scale
+    # set says what makes it different -- usually its size -- and the image
+    # is not repeated once per size, to drift.
+    #
+    # The keys themselves are the provider type's; these are dicer's.
+    runner:
+      # An image carrying the Actions runner. Pin it to a digest --
+      # ghcr.io/actions/actions-runner:latest@sha256:... -- and a runner
+      # boots that image or none: a tag is a name somebody else can move, a
+      # digest names the content itself.
+      image: ghcr.io/actions/actions-runner:latest
+
+      # The VM's root disk, which is where a job's checkout and build output
+      # go. Unset is 20 GiB. The disk is sparse, so what is not used costs
+      # the host nothing.
+      disk: 20GiB
+
+      # Dicer resources on the host. Unset takes the host's default; a name
+      # given in a block shared by several hosts must exist on each of them.
+      # kernel: vmlinux-6.12
+      # network: default
+
+      # Added to every runner's environment. The variables that register
+      # the runner with GitHub are Rungar's, and override anything named here.
+      # env:
+      #   HTTPS_PROXY: http://proxy.internal:3128
+
+  # Everything compute1 has, but for what it says itself.
+  - <<: *dicer
+    name: compute2
+    address: 10.10.0.102:7443
+    # Every provider takes these. Counted as having half the runners it has,
+    # so spread gives it two for every one an unweighted provider gets:
+    # weight: 2
+    # The most runners it may have, of every scale set: a ceiling of your
+    # own, where the backend would take more. Unset leaves it to the
+    # backend, which refuses a runner once it is full:
+    # max_runners: 8
+    # Kept in the configuration but taken out of placement. Runners already
+    # on it are left to finish their jobs:
+    # disabled: true
+
+# The scale sets this daemon runs. Each one is a label workflows target, the
+# providers its runners go on with a runner block for each, and a ceiling.
+# Each runner block is read by its provider, over the provider's own, and is
+# in that provider type's terms: a scale set on hosts and a cloud says its
+# size once for each.
+#
+# Scale sets sharing a provider share it and nothing else: each has its own
+# message session with GitHub, its own runners -- told apart by a label on
+# every machine -- and its own place in the metrics. What they compete for is
+# the provider's room, which is the provider's own to say: it makes a runner
+# or refuses it as full, and the runner is tried on the scale set's next
+# provider.
+#
+# A scale set that stops takes the daemon with it, and the daemon adopts
+# everything when it comes back, so a restart does not disturb a running job.
+scale_sets:
+  # `runs-on: rungar-c2-m4`
+  - name: rungar-c2-m4
+    # Where its runners go, and the order they are tried in: spread, the
+    # default, tries first the provider with the fewest of them, which
+    # evens them out; pack tries them in the order written, which is how
+    # on-premises hosts are used before a cloud. A provider that is full
+    # refuses, and the next is tried.
+    #
+    # Each provider has the runner block for this scale set's runners on
+    # it. Hosts alike take the same block, written once with an anchor.
+    providers:
+      - name: compute1
+        runner: &c2-m4 {vcpus: 2, memory: 4GiB}
+      - name: compute2
+        runner: *c2-m4
+    placement: spread
+    max_runners: 12
+    # How long a runner has to boot and register with GitHub before Rungar
+    # gives up on it. A runner GitHub knows about is left alone however long
+    # it has been idle. Unset is 5m.
+    start_timeout: 5m
+  # `runs-on: rungar-c4-m8`
+  - name: rungar-c4-m8
+    providers:
+      - name: compute1
+        runner: &c4-m8 {vcpus: 4, memory: 8GiB}
+      - name: compute2
+        runner: *c4-m8
+    max_runners: 6
+  # A bigger size, kept ready so that a long build does not wait for a boot,
+  # and given more disk than the provider's default.
+  #
+  # Its priority is what stops the smaller sizes starving it. A scale set of
+  # small runners fills the gaps a large one needs, so without this the large
+  # one waits for enough room to appear on one provider at a moment
+  # when nobody smaller is asking -- a coincidence a busy fleet may never
+  # produce. Higher wins; the default is zero, and scale sets that share a
+  # priority take their turn.
+  #
+  # It is not a reservation: nothing is held empty in advance, and a runner
+  # already running is never taken away.
+  - name: rungar-c8-m16
+    # One host's block may differ from another's: here compute2 gives it
+    # more disk. A merge key takes the rest from the first.
+    providers:
+      - name: compute1
+        runner: &c8-m16
+          vcpus: 8
+          memory: 16GiB
+          disk: 50GiB
+          # Mounted into this size of runner only, named as they are on its
+          # host: a Dicer volume, a copy of a host file, or a tmpfs.
+          # mounts:
+          #   - type: volume
+          #     source: build-cache
+          #     target: /home/runner/.cache
+          #   - type: file
+          #     source: /etc/ssl/certs/ca-certificates.crt
+          #     target: /etc/ssl/certs/ca-certificates.crt
+          #     read_only: true
+      - name: compute2
+        runner:
+          <<: *c8-m16
+          disk: 100GiB
+    max_runners: 2
+    min_runners: 1
+    priority: 10
+
+    # Further labels workflows may target, beyond the name. The name is
+    # always one of them.
+    # labels: [linux, x64, big]
+
+    # The runner group, which decides which repositories may use this scale
+    # set. Empty is GitHub's own "Default" group.
+    # runner_group: Default
+
+    # Take no jobs: no runner is made, and its jobs wait on GitHub. rungar
+    # scale-sets pause and resume do the same until the daemon restarts.
+    # paused: true
+
+# Prometheus metrics, served on /metrics. Rungar always records them; this
+# decides whether they are served. Off by default: the endpoint has nothing to
+# authenticate with, so it binds to loopback unless you deliberately widen it.
+metrics:
+  enable: false
+  listen: 127.0.0.1:9102
+
+# What the daemon has done to runners, providers and scale sets, and why, which
+# rungar events shows: runners created, adopted, removed and lost, providers
+# found full or failing, and scale sets paused and resumed. Kept in a file, so that they outlive a restart; the oldest go
+# once there are max_count, or once they are older than max_age, if set.
+# events:
+#   file: /var/log/rungar/events.jsonl
+#   max_count: 10000
+#   max_age: 720h
+
+# The socket the other rungar commands ask the running daemon through --
+# status, the ls and inspect commands, rm, disable and enable. Readable and
+# writable by the daemon's user and group alone, which is who may use them.
+# socket: /run/rungar/rungar.sock
+
+log_level: info

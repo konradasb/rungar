@@ -1,0 +1,13 @@
+{{- /*
+  Copyright 2026 Rungar Authors
+  SPDX-License-Identifier: MIT
+
+  section-cards shows the pages of the section it is used in as cards, in
+  the sidebar's order, so a section's index lists its pages without being
+  kept up to date by hand.
+
+  @param {int} cols The number of columns; 2 unless given.
+
+  @example {{< section-cards >}}
+*/ -}}
+{{- partial "page-cards.html" (dict "pages" .Page.Pages.ByWeight "cols" (.Get "cols")) -}}

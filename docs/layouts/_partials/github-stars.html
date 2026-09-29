@@ -1,0 +1,60 @@
+{{- /*
+  Copyright 2026 Rungar Authors
+  SPDX-License-Identifier: MIT
+
+  Shows the repository's star count beside the links to it: the navbar's
+  GitHub icon and the home page's GitHub button. The count is fetched in the
+  visitor's browser from GitHub's API, which allows 60 unauthenticated
+  requests an hour, and kept for an hour. Nothing is shown if it cannot be
+  had, or is still 0.
+*/ -}}
+<script>
+  (() => {
+    const repo = "konradasb/rungar";
+    const key = "rungar-github-stars";
+    const maxAge = 60 * 60 * 1000;
+
+    const format = (n) => (n < 1000 ? String(n) : (n / 1000).toFixed(n < 10000 ? 1 : 0).replace(/\.0$/, "") + "k");
+
+    const show = (stars) => {
+      if (!(stars > 0)) return;
+      const links = document.querySelectorAll(
+        `a[title="GitHub"][href="https://github.com/${repo}"], a.rungar-button[href="https://github.com/${repo}"]`,
+      );
+      for (const link of links) {
+        if (link.querySelector(".rungar-stars")) continue;
+        const count = document.createElement("span");
+        count.className = "rungar-stars";
+        count.setAttribute("aria-label", `${stars} stars on GitHub`);
+        count.innerHTML =
+          '<svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13" aria-hidden="true">' +
+          '<path d="M9.05 2.93c.3-.92 1.6-.92 1.9 0l1.07 3.29a1 1 0 0 0 .95.69h3.46c.97 0 1.37 1.24.59 1.81l-2.8 2.03a1 1 0 0 0-.36 1.12l1.07 3.29c.3.92-.76 1.69-1.54 1.12l-2.8-2.03a1 1 0 0 0-1.18 0l-2.8 2.03c-.78.57-1.84-.2-1.54-1.12l1.07-3.29a1 1 0 0 0-.36-1.12L2.98 8.72c-.78-.57-.38-1.81.59-1.81h3.46a1 1 0 0 0 .95-.69z"/>' +
+          "</svg>";
+        count.append(format(stars));
+        link.classList.add("rungar-stars-host");
+        link.append(count);
+      }
+    };
+
+    let cached;
+    try {
+      cached = JSON.parse(localStorage.getItem(key));
+    } catch {}
+    const ready = (fn) =>
+      document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn) : fn();
+
+    if (cached && Date.now() - cached.at < maxAge) {
+      ready(() => show(cached.stars));
+      return;
+    }
+    fetch(`https://api.github.com/repos/${repo}`, { headers: { Accept: "application/vnd.github+json" } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        try {
+          localStorage.setItem(key, JSON.stringify({ stars: data.stargazers_count, at: Date.now() }));
+        } catch {}
+        ready(() => show(data.stargazers_count));
+      })
+      .catch(() => {});
+  })();
+</script>

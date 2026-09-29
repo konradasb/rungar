@@ -1,0 +1,28 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+apiVersion: v2
+name: rungar
+description: GitHub Actions runners as virtual machines, one per job, on hosts of your own
+type: application
+# Both are set when a release publishes the chart, to the release's version:
+# see .github/workflows/chart.yaml. From a checkout, the chart runs the image
+# tagged latest.
+version: 0.0.0-dev
+appVersion: latest
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/konradasb/rungar
+sources:
+  - https://github.com/konradasb/rungar
+# The mark on a dark tile, which reads on Artifact Hub's light and dark themes
+# alike.
+icon: https://raw.githubusercontent.com/konradasb/rungar/main/docs/static/images/icon.svg
+keywords:
+  - github-actions
+  - runners
+  - ci
+  - virtual-machines
+maintainers:
+  - name: konradasb
+    url: https://github.com/konradasb

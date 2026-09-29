@@ -1,0 +1,165 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+version: 2
+
+project_name: rungar
+
+before:
+  hooks:
+    # The shell completions the package installs.
+    - make completions
+
+builds:
+  - id: rungar
+    main: ./cmd/rungar
+    binary: rungar
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    # Rungar is a network client and runs anywhere Go does; the Dicer hosts it
+    # talks to are the Linux part.
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/konradasb/rungar/internal/version.Version={{ .Version }}
+      - -X github.com/konradasb/rungar/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/konradasb/rungar/internal/version.BuildDate={{ .CommitDate }}
+
+archives:
+  - id: rungar
+    ids:
+      - rungar
+    name_template: "rungar_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+# The Linux package, published to the apt and dnf repository at pkg.rungar.sh
+# by .github/workflows/packages.yaml: rungar and its service, as install.sh
+# sets a host up, but at /usr/bin and with the rungar user made by the
+# package. build/package holds what it installs besides the binary. It
+# carries no configuration, as none is a useful default: example.yml is its
+# documentation.
+#
+# RPMs are signed when GPG_KEY_FILE names the repository's key, as it does in
+# the release workflow, as dnf checks each package's signature. apt checks
+# only the repository's, which the packages workflow signs.
+nfpms:
+  - id: rungar
+    package_name: rungar
+    ids:
+      - rungar
+    formats:
+      - deb
+      - rpm
+    vendor: Rungar Authors
+    homepage: https://github.com/konradasb/rungar
+    maintainer: Rungar Authors <maintainers@rungar.sh>
+    license: MIT
+    description: |-
+      GitHub Actions runners as virtual machines, one per job, on hosts of your own
+      Rungar listens for GitHub Actions jobs through GitHub's scale set API and
+      runs each on a fresh virtual machine, made by a provider such as a Dicer
+      host, which it removes once the job is done. It is the daemon, rungar, as
+      a systemd service, with the command line that asks it.
+    section: admin
+    bindir: /usr/bin
+    file_name_template: "{{ .ConventionalFileName }}"
+    # The certificates it verifies GitHub with.
+    dependencies:
+      - ca-certificates
+    contents:
+      - src: build/package/rungar.service
+        dst: /usr/lib/systemd/system/rungar.service
+      - src: build/package/sysusers.conf
+        dst: /usr/lib/sysusers.d/rungar.conf
+      # The configuration's directory, which the configuration and the
+      # credentials it names go in, readable by the rungar group alone. The
+      # user is made by the preinstall script, before this is unpacked.
+      - dst: /etc/rungar
+        type: dir
+        file_info:
+          mode: 0750
+          owner: root
+          group: rungar
+      - src: example.yml
+        dst: /usr/share/rungar/example.yml
+      - src: completions/rungar.bash
+        dst: /usr/share/bash-completion/completions/rungar
+      - src: completions/rungar.fish
+        dst: /usr/share/fish/vendor_completions.d/rungar.fish
+      # Each family's zsh looks in its own directory.
+      - src: completions/_rungar
+        dst: /usr/share/zsh/vendor-completions/_rungar
+        packager: deb
+      - src: completions/_rungar
+        dst: /usr/share/zsh/site-functions/_rungar
+        packager: rpm
+      - src: LICENSE
+        dst: /usr/share/doc/rungar/copyright
+        packager: deb
+      - src: LICENSE
+        dst: /usr/share/licenses/rungar/LICENSE
+        packager: rpm
+    rpm:
+      signature:
+        key_file: '{{ if index .Env "GPG_KEY_FILE" }}{{ .Env.GPG_KEY_FILE }}{{ end }}'
+    overrides:
+      deb:
+        scripts:
+          preinstall: build/package/deb/preinst
+          postinstall: build/package/deb/postinst
+          preremove: build/package/deb/prerm
+          postremove: build/package/deb/postrm
+      rpm:
+        scripts:
+          preinstall: build/package/rpm/pre
+          postinstall: build/package/rpm/post
+          preremove: build/package/rpm/preun
+          postremove: build/package/rpm/postun
+
+# Generate SBOMs for every archive and the source tarball using syft
+sboms:
+  - artifacts: archive
+  - artifacts: source
+    id: source
+
+# Sign the checksums file with cosign (keyless, via GitHub OIDC in CI)
+# Each artifact's sha256 is covered transitively via the checksums file.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    output: true
+    artifacts: checksum
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# The release notes are written by hand, with Claude Code's /release-notes,
+# into the draft this makes; see RELEASES.md. The draft's body starts empty.
+changelog:
+  disable: true
+
+# The container image is not built here but by the release workflow's image
+# job, from the Dockerfile, so that `make docker` and a release build it the
+# same way.
+release:
+  github:
+    owner: konradasb
+    name: rungar
+  draft: true
+  replace_existing_draft: true

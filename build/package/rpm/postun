@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar package's %postun: $1 is 0 when the package is removed. RPM
+# removes /etc/rungar only once it is empty, so the configuration and the
+# credentials beside it stay, as do the events in /var/log/rungar and the
+# rungar user, which files may still belong to.
+
+if [ "$1" -eq 0 ] && [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+fi
+
+exit 0

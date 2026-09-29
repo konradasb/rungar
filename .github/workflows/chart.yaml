@@ -1,0 +1,80 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: chart
+
+# A published release's Helm chart goes to oci://ghcr.io/konradasb/charts/rungar,
+# signed with cosign, versioned as the release and running its image. Like
+# the image, it waits for the release to be published rather than drafted. A
+# pre-release's chart is published too, with its version, which Helm installs
+# only when asked for by it or with --devel. Run by hand to publish a
+# release's chart again.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release to publish, such as v0.2.0
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chart-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # To push to the repository's package.
+      packages: write
+      # To sign the chart with cosign, keyless, as this workflow.
+      id-token: write
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      REGISTRY: ghcr.io/${{ github.repository_owner }}/charts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ env.TAG }}
+
+      # For the pinned helm the Makefile builds.
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          # As for a release: nothing another run could have planted in the
+          # shared cache.
+          cache: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Package
+        run: make chart CHART_VERSION="${TAG#v}"
+
+      - name: Push
+        id: push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          helm=$(echo bin/helm-*)
+          printf '%s\n' "$GITHUB_TOKEN" |
+            "$helm" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          "$helm" push "dist/rungar-${TAG#v}.tgz" "oci://$REGISTRY" 2>&1 | tee push.log
+          digest=$(awk '/^Digest:/ { print $2 }' push.log)
+          test -n "$digest" || { echo "helm push printed no digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # Signed by digest, which covers the version tag pointing at it.
+      - name: Sign
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$REGISTRY/rungar@$DIGEST"

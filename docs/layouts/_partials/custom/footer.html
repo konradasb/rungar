@@ -1,0 +1,70 @@
+{{- /*
+Copyright 2026 Rungar Authors
+SPDX-License-Identifier: MIT
+
+The site's footer: what Rungar is, where to go next, and the licence. The
+home page also ends in the name, large. Links to pages resolve through
+site.GetPage, so they are right for whichever version is being read.
+*/ -}}
+{{- $page := .context -}}
+{{- $columns := slice
+(dict "title" "Docs" "links" (slice
+(dict "page" "/docs/getting-started" "title" "Getting started")
+(dict "page" "/docs/concepts" "title" "Concepts")
+(dict "page" "/docs/guides" "title" "Guides")
+(dict "page" "/docs/examples" "title" "Examples")
+(dict "page" "/docs/reference" "title" "Reference")))
+(dict "title" "Project" "links" (slice
+(dict "url" "https://github.com/konradasb/rungar/blob/main/ROADMAP.md" "title"
+"Roadmap")
+(dict "url" "https://github.com/konradasb/rungar/blob/main/CONTRIBUTING.md"
+"title" "Contributing")
+(dict "url" "https://github.com/konradasb/rungar/blob/main/SECURITY.md" "title"
+"Security")))
+(dict "title" "Code" "links" (slice
+(dict "url"
+"https://github.com/konradasb/rungar/blob/main/example.yml"
+"title" "Configuration")
+(dict "url" "https://github.com/konradasb/rungar" "title" "Repository")
+(dict "url" "https://github.com/konradasb/rungar/issues" "title" "Issues")))
+-}}
+<div class="rungar-footer">
+  <div class="rungar-footer-about">
+    <a class="rungar-footer-brand" href="{{ site.Home.RelPermalink }}">
+      <img class="hx:block hx:dark:hidden" src="{{ "images/logo.svg" | relURL }}" alt width="28" height="28" />
+      <img class="hx:hidden hx:dark:block" src="{{ "images/logo-dark.svg" | relURL }}" alt width="28" height="28" />
+      <span>Rungar</span>
+    </a>
+    <p>Ephemeral GitHub Actions runners: a clean machine for every job.</p>
+    <p>MIT licensed, and developed in the open on GitHub.</p>
+  </div>
+  {{- range $columns }}
+  <nav class="rungar-footer-column" aria-label="{{ .title }}">
+    <h2>{{ .title }}</h2>
+    <ul>
+      {{- range $link := .links }}
+      <li>
+        {{- with $link.url }}
+        <a href="{{ . }}" target="_blank" rel="noreferrer">{{ $link.title }}</a>
+        {{- end }}
+        {{- with $link.page }}
+        {{- with site.GetPage . }}<a href="{{ .RelPermalink }}">{{ $link.title
+          }}</a>{{ else }}{{ errorf "footer: no page %q" . }}{{ end }}
+        {{- end }}
+      </li>
+      {{- end }}
+    </ul>
+  </nav>
+  {{- end }}
+</div>
+<div class="rungar-footer-legal">
+  <span>© {{ now.Year }} Rungar Authors · <a
+      href="https://github.com/konradasb/rungar/blob/main/LICENSE"
+      target="_blank" rel="noreferrer">MIT License</a></span>
+  <span>Built with <a href="https://gohugo.io" target="_blank"
+      rel="noreferrer">Hugo</a> and <a href="https://github.com/imfing/hextra"
+      target="_blank" rel="noreferrer">Hextra</a></span>
+</div>
+{{- if $page.IsHome }}
+<div class="rungar-wordmark" aria-hidden="true">Rungar</div>
+{{- end }}

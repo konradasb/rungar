@@ -1,0 +1,13 @@
+#!/bin/sh
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar package's %preun: $1 is 0 when the package is removed, 1 when
+# an upgrade replaces it. Only removing it stops the daemon; runners keep
+# running, and a rungar installed again adopts them.
+
+if [ "$1" -eq 0 ] && [ -d /run/systemd/system ]; then
+  systemctl disable --now rungar.service || true
+fi
+
+exit 0

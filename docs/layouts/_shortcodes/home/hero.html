@@ -1,0 +1,57 @@
+{{- /*
+Copyright 2026 Rungar Authors
+SPDX-License-Identifier: MIT
+
+The home page's hero: a badge, a headline whose second line is
+highlighted, a subtitle, the calls to action and the install command on
+the left, and what the shortcode encloses, such as a terminal, on the
+right.
+
+@param {string} badge The badge's text.
+@param {string} badgeLink Where the badge links to.
+@param {string} title The headline's first line.
+@param {string} highlight The headline's second line, highlighted.
+@param {string} subtitle The text beneath the headline.
+@param {string} install The install command, copied by its button.
+*/ -}}
+<section class="rungar-hero not-prose">
+  <div class="rungar-hero-text">
+    {{- with .Get "badge" }}
+    <a class="rungar-badge" href="{{ $.Get "badgeLink" }}" target="_blank"
+      rel="noreferrer">{{ . }} <span aria-hidden="true">→</span></a>
+    {{- end }}
+    <h1 class="rungar-headline">{{ .Get "title" }}<br /><span
+        class="rungar-gradient">{{ .Get "highlight" }}</span></h1>
+    <p class="rungar-subtitle">{{ .Get "subtitle" | markdownify }}</p>
+    <div class="rungar-actions">
+      <a class="rungar-button rungar-button-primary"
+        href="docs/getting-started/">Get started</a>
+      <a class="rungar-button rungar-button-secondary"
+        href="https://github.com/konradasb/rungar" target="_blank"
+        rel="noreferrer">
+        {{- partial "utils/icon.html" (dict "name" "github" "attributes"
+        "height=18") }} GitHub
+      </a>
+    </div>
+    {{- with .Get "install" }}
+    <div class="rungar-install">
+      <code><span class="rungar-prompt">$</span> {{ . }}</code>
+      <button type="button" class="rungar-copy"
+        aria-label="Copy the install command" data-copy="{{ . }}">
+        {{- partial "utils/icon.html" (dict "name" "copy" "attributes"
+        "height=16") -}}
+      </button>
+    </div>
+    {{- end }}
+  </div>
+  <div class="rungar-hero-aside">{{ .Inner }}</div>
+</section>
+<script>
+  document.querySelectorAll(".rungar-copy").forEach((button) => {
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(button.dataset.copy);
+      button.classList.add("copied");
+      setTimeout(() => button.classList.remove("copied"), 1500);
+    });
+  });
+</script>

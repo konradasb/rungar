@@ -1,0 +1,591 @@
+/*
+ * Copyright 2026 Rungar Authors
+ * SPDX-License-Identifier: MIT
+ *
+ * Rungar's look over Hextra's: an ember palette, after the hot cell in the logo,
+ * the docs' type, the home page and the footer. The layout is Dicer's, so the
+ * two sites read as one family; the colours tell them apart.
+ */
+
+/*
+ * Hextra derives every shade of its primary colour from these, and every
+ * font from the two --hx-font variables. The fonts are loaded in
+ * layouts/_partials/custom/head-end.html.
+ */
+:root {
+  --hx-font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --hx-font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --primary-hue: 21deg;
+  --primary-saturation: 90%;
+  --primary-lightness: 45%;
+
+  --rungar-flame: #f59e0b;
+  --rungar-ember: #ea580c;
+  --rungar-ink: #1c1917;
+  --rungar-muted: #57534e;
+  --rungar-line: rgb(28 25 23 / 0.08);
+  --rungar-surface: #ffffff;
+  --rungar-terminal: #1a1512;
+}
+
+/*
+ * Hextra and this sheet size everything in rem, and cap the page's width, so
+ * on a 4K screen the whole site shrinks to a small strip in the middle. Past
+ * 2240px wide the root font grows with the viewport, and everything with it:
+ * a 3840px screen gets the proportions of a 2240px one. Media queries still
+ * measure in the browser's default rem, so breakpoints don't move.
+ */
+html {
+  font-size: max(100%, calc(100vw / 140));
+}
+
+.dark {
+  --primary-hue: 27deg;
+  --primary-saturation: 96%;
+  --primary-lightness: 61%;
+
+  --rungar-ink: #f5f5f4;
+  --rungar-muted: #a8a29e;
+  --rungar-line: rgb(255 255 255 / 0.08);
+  --rungar-surface: #12100e;
+}
+
+/*
+ * Chroma's console highlighter marks a line continuation, the \ that ends a
+ * long command, as an error or an escape, in red. It is neither.
+ */
+:is(.highlight, .dark .highlight) .chroma :is(.err, .language-console .se) {
+  color: inherit;
+  background: none;
+}
+
+/*
+ * The docs' text is justified, and hyphenated so the spaces between words
+ * stay even. On a phone's narrow column justifying opens gaps however it is
+ * hyphenated, so there it stays ragged.
+ */
+@media (min-width: 640px) {
+
+  .content p,
+  .content li {
+    text-align: justify;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+  }
+
+  /* A link is read, and clicked, whole. */
+  .content :is(p, li) a {
+    -webkit-hyphens: manual;
+    hyphens: manual;
+  }
+}
+
+/* Everywhere: a slightly tighter, more modern type setting. */
+.content h1,
+.content h2,
+.content h3 {
+  letter-spacing: -0.015em;
+}
+
+.hextra-card {
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.hextra-card:hover {
+  border-color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness) / 0.6);
+  transform: translateY(-2px);
+}
+
+/* Hextra fades a card's icon until it is hovered; ours are in colour. */
+.hextra-card .hextra-card-icon svg,
+.dark .hextra-card .hextra-card-icon svg {
+  color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
+}
+
+/* The home page. */
+
+body:has(.rungar-hero) {
+  background-image:
+    radial-gradient(60rem 30rem at 85% -10%, rgb(249 115 22 / 0.14), transparent 70%),
+    radial-gradient(40rem 24rem at 0% 0%, rgb(245 158 11 / 0.10), transparent 70%);
+}
+
+.rungar-hero {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  display: grid;
+  /* minmax(0, …) lets a long line scroll inside its box, not widen the page. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3rem;
+  align-items: center;
+  padding-block: 2rem 4rem;
+}
+
+@media (min-width: 1024px) {
+  .rungar-hero {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    padding-block: 4rem 6rem;
+  }
+}
+
+.rungar-hero-text,
+.rungar-hero-aside {
+  min-width: 0;
+}
+
+.rungar-badge {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--rungar-line);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--rungar-muted);
+  background: var(--rungar-surface);
+}
+
+.rungar-badge:hover {
+  color: var(--rungar-ink);
+}
+
+.rungar-headline {
+  margin-top: 1.5rem;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--rungar-ink);
+}
+
+.rungar-gradient {
+  background: linear-gradient(90deg, var(--rungar-flame), var(--rungar-ember));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rungar-subtitle {
+  margin-top: 1.5rem;
+  max-width: 36rem;
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: var(--rungar-muted);
+}
+
+.rungar-subtitle code {
+  font-size: 0.95em;
+}
+
+.rungar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.rungar-button {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem 1.4rem;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: background-color 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.rungar-button:hover {
+  transform: translateY(-1px);
+}
+
+.rungar-button-primary {
+  color: #fff;
+  background: hsl(var(--primary-hue) var(--primary-saturation) 36%);
+  box-shadow: 0 8px 24px -8px rgb(234 88 12 / 0.55);
+}
+
+.rungar-button-primary:hover {
+  background: hsl(var(--primary-hue) var(--primary-saturation) 31%);
+}
+
+.rungar-button-secondary {
+  color: var(--rungar-ink);
+  border: 1px solid var(--rungar-line);
+  background: var(--rungar-surface);
+}
+
+.rungar-button-secondary:hover {
+  border-color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness) / 0.6);
+}
+
+.rungar-install {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  border: 1px solid var(--rungar-line);
+  border-radius: 0.75rem;
+  background: var(--rungar-surface);
+  font-size: 0.8rem;
+}
+
+.rungar-install code {
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--rungar-muted);
+}
+
+.rungar-copy {
+  flex: none;
+  padding: 0.4rem;
+  border-radius: 0.5rem;
+  color: var(--rungar-muted);
+  cursor: pointer;
+}
+
+.rungar-copy:hover,
+.rungar-copy.copied {
+  color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
+  background: var(--rungar-line);
+}
+
+.rungar-prompt {
+  color: var(--rungar-flame);
+  user-select: none;
+}
+
+/* A terminal window. */
+
+.rungar-terminal {
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 1rem;
+  background: var(--rungar-terminal);
+  box-shadow:
+    0 30px 60px -20px rgb(28 25 23 / 0.45),
+    0 0 0 1px rgb(249 115 22 / 0.10);
+}
+
+.rungar-terminal-bar {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.rungar-terminal-bar span {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.15);
+}
+
+.rungar-terminal-bar em {
+  margin-left: auto;
+  margin-right: auto;
+  padding-right: 2.5rem;
+  font-size: 0.75rem;
+  font-style: normal;
+  color: rgb(255 255 255 / 0.4);
+}
+
+.rungar-terminal pre {
+  margin: 0;
+  padding: 1.25rem 1.5rem 1.5rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.8;
+  background: transparent;
+}
+
+.rungar-command {
+  color: #fafaf9;
+}
+
+.rungar-output {
+  color: #a8a29e;
+}
+
+/* The footer, on every page. */
+
+.hextra-footer {
+  border-top: 1px solid var(--rungar-line);
+  background: var(--rungar-surface) !important;
+  overflow: hidden;
+}
+
+.rungar-footer {
+  display: grid;
+  gap: 2.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-block: 3.5rem 2.5rem;
+}
+
+@media (min-width: 768px) {
+  .rungar-footer {
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  }
+}
+
+.rungar-footer-about {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 768px) {
+  .rungar-footer-about {
+    grid-column: auto;
+  }
+}
+
+.rungar-footer-brand {
+  display: inline-flex;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--rungar-ink);
+}
+
+.rungar-footer-about p {
+  max-width: 20rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--rungar-muted);
+}
+
+.rungar-footer-column h2 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rungar-ink);
+}
+
+.rungar-footer-column ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.rungar-footer-column a,
+.rungar-footer-legal a {
+  color: var(--rungar-muted);
+  transition: color 0.2s;
+}
+
+.rungar-footer-column a:hover,
+.rungar-footer-legal a:hover {
+  color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
+}
+
+.rungar-footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  justify-content: space-between;
+  padding-block: 1.5rem 2rem;
+  border-top: 1px solid var(--rungar-line);
+  font-size: 0.8rem;
+  color: var(--rungar-muted);
+}
+
+/*
+ * The home page ends in the name, large, fading out and cut off by the
+ * bottom of the page.
+ */
+.rungar-wordmark {
+  margin-bottom: -0.22em;
+  font-size: clamp(6rem, 24vw, 22rem);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  text-align: center;
+  user-select: none;
+  background: linear-gradient(180deg, hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness) / 0.35), transparent 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The repository's star count, beside the links to it on GitHub. */
+
+.rungar-stars-host {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.rungar-stars {
+  display: inline-flex;
+  gap: 0.2rem;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--rungar-muted);
+}
+
+.rungar-button .rungar-stars {
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--rungar-line);
+  font-size: 0.85rem;
+}
+/*
+ * The home page's picture: GitHub Actions above, Rungar in the middle, the
+ * providers below, and jobs flowing between them. Nodes are placed in the
+ * lines' own coordinates, a 480 by 520 box, through --x and --y.
+ */
+
+.rungar-orbit {
+  position: relative;
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  aspect-ratio: 480 / 520;
+}
+
+.rungar-orbit-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.rungar-orbit-lines path {
+  fill: none;
+  stroke: var(--rungar-muted);
+  stroke-opacity: 0.35;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+}
+
+.rungar-orbit-jobs circle {
+  fill: var(--rungar-flame);
+  filter: drop-shadow(0 0 4px rgb(249 115 22 / 0.8));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rungar-orbit-jobs {
+    display: none;
+  }
+}
+
+.rungar-orbit-node,
+.rungar-orbit-core {
+  position: absolute;
+  left: calc(var(--x) / 480 * 100%);
+  top: calc(var(--y) / 520 * 100%);
+  transform: translate(-50%, -50%);
+}
+
+.rungar-orbit-node {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--rungar-line);
+  border-radius: 0.9rem;
+  color: var(--rungar-ink);
+  background: var(--rungar-surface);
+  box-shadow: 0 10px 30px -18px rgb(28 25 23 / 0.35);
+  transition: color 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.rungar-orbit-node svg {
+  flex: none;
+  fill: currentColor;
+}
+
+.rungar-orbit-source {
+  gap: 0.75rem;
+  padding: 0.7rem 1.1rem;
+  white-space: nowrap;
+}
+
+.rungar-orbit-source svg {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.rungar-orbit-source span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.rungar-orbit-source strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.rungar-orbit-source em {
+  font-size: 0.75rem;
+  font-style: normal;
+  color: var(--rungar-muted);
+}
+
+.rungar-orbit-tile {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 17.5%;
+  aspect-ratio: 1;
+  color: var(--rungar-muted);
+}
+
+.rungar-orbit-tile svg {
+  width: 38%;
+  height: 38%;
+}
+
+.rungar-orbit-tile span {
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.rungar-orbit-tile:hover {
+  color: var(--rungar-ember);
+  border-color: rgb(234 88 12 / 0.4);
+  transform: translate(-50%, calc(-50% - 2px));
+}
+
+/* Backends Rungar has no provider for yet: there, but quieter. */
+
+.rungar-orbit-more {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+/* The die's pips are holes, whatever the surface behind them. */
+.rungar-orbit-pips {
+  fill: var(--rungar-surface);
+}
+
+.rungar-orbit-core {
+  display: grid;
+  place-items: center;
+  width: 21%;
+  aspect-ratio: 1;
+  border: 1px solid rgb(249 115 22 / 0.35);
+  border-radius: 999px;
+  background: var(--rungar-surface);
+  box-shadow:
+    0 0 0 8px rgb(249 115 22 / 0.06),
+    0 0 48px -6px rgb(249 115 22 / 0.55);
+}
+
+.rungar-orbit-core img {
+  width: 50%;
+  height: auto;
+}

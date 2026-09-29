@@ -1,0 +1,37 @@
+#!/bin/sh
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+# The rungar package's %post: $1 is 1 on an install, 2 on an upgrade. An
+# install enables and starts nothing: rungar has nothing to do until it is
+# configured, and no configuration is a useful default. An upgrade restarts
+# the daemon if it runs, which disturbs no job, as the daemon that starts
+# adopts every runner -- unless the new rungar would not start from the
+# configuration, when the old one is left running.
+
+# Only where systemd runs, as it may not when building an image.
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+  if [ "$1" -eq 1 ]; then
+    cat <<'MSG'
+
+rungar is installed but not started: it has nothing to do until it is
+configured. Write /etc/rungar/config.yaml -- /usr/share/rungar/example.yml
+describes every setting -- then check it and start the daemon:
+
+  sudo -u rungar rungar validate
+  sudo systemctl enable --now rungar
+
+MSG
+  elif systemctl is-active --quiet rungar.service; then
+    if runuser -u rungar -- /usr/bin/rungar validate -f /etc/rungar/config.yaml >/dev/null 2>&1; then
+      systemctl try-restart rungar.service ||
+        echo "rungar did not restart: see journalctl -u rungar" >&2
+    else
+      echo "rungar: not restarted, as the new version does not load /etc/rungar/config.yaml;" >&2
+      echo "  see sudo -u rungar rungar validate, then sudo systemctl restart rungar" >&2
+    fi
+  fi
+fi
+
+exit 0

@@ -1,0 +1,19 @@
+# Copyright 2026 Rungar Authors
+# SPDX-License-Identifier: MIT
+
+---
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # The API follows Google's AIPs, where standard methods return the
+    # resource itself (AIP-131..134) and deletes return Empty (AIP-135),
+    # rather than a bespoke FooResponse wrapper per method.
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE
