@@ -22,7 +22,10 @@ name: e2e-aws
 #
 # trust.json lets the account's token.actions.githubusercontent.com provider
 # assume the role by sts:AssumeRoleWithWebIdentity when the token's aud is
-# sts.amazonaws.com and its sub is repo:konradasb/rungar:ref:refs/heads/main.
+# sts.amazonaws.com and its sub is
+# repo:konradasb@55544305/rungar@1396667035:ref:refs/heads/main: the
+# repository's immutable subject, with the owner's and repository's IDs,
+# which a rename or a new repository of the same name does not take.
 # permissions.json allows ec2:DescribeInstances and ec2:DescribeImages,
 # ec2:RunInstances in the test region, ec2:CreateTags when ec2:CreateAction
 # is RunInstances, and ec2:TerminateInstances on instances tagged
