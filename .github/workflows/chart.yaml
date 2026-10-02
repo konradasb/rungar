@@ -73,6 +73,15 @@ jobs:
           test -n "$digest" || { echo "helm push printed no digest"; exit 1; }
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
+      # cosign reads Docker's credentials, not the ones helm registry login
+      # stores.
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       # Signed by digest, which covers the version tag pointing at it.
       - name: Sign
         env:
