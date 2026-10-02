@@ -6,7 +6,8 @@
 # Builds every version of the documentation that docs/versions lists into
 # one directory, as the site is published: each under its own path, with a
 # switcher between them, the ones that are not the latest release saying
-# so, and the site's root leading to the latest.
+# so, and the site's root, and every path without a version, leading to the
+# latest.
 #
 #   docs/build-versions.sh HUGO OUT
 #
@@ -120,3 +121,22 @@ cat >"$out/index.html" <<HTML
 <a href="$prefix/$latest/">Rungar documentation</a>
 HTML
 cp "$out/$latest/404.html" "$out/404.html"
+
+# Every page of the latest version is also reached without the version, so
+# links that carry none, as the README and the installers' messages do, lead
+# to the latest release. A path that is itself a version is left to it.
+(cd "$out/$latest" && find . -mindepth 2 -name index.html) | while read -r page; do
+  path=${page#./}
+  path=${path%index.html}
+  [[ $seen == *" ${path%%/*} "* ]] && continue
+  mkdir -p "$out/$path"
+  cat >"$out/$path/index.html" <<HTML
+<!doctype html>
+<meta charset="utf-8">
+<title>Rungar</title>
+<link rel="canonical" href="$base_url/$latest/$path">
+<meta http-equiv="refresh" content="0; url=$prefix/$latest/$path">
+<script>location.replace("$prefix/$latest/$path" + location.hash)</script>
+<a href="$prefix/$latest/$path">Rungar documentation</a>
+HTML
+done
