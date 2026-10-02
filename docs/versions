@@ -5,3 +5,4 @@
 # dev is main, which is not released yet. The first release listed is the
 # latest, where the site's root leads; until there is one, dev is.
 dev   .
+v0.1  v0.1.0
